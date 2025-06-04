@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Viewer,
   Ion,
@@ -58,6 +58,38 @@ const CesiumViewer = () => {
       anchor.point.pixelSize = new ConstantProperty(8)
     }
   }
+
+  const removeLine = useCallback((line: Entity, viewer: Viewer) => {
+    viewer.entities.remove(line)
+    const lineWithAnchors = line as Entity & { anchors?: [Entity, Entity] }
+    if (lineWithAnchors.anchors) {
+      for (const anchor of lineWithAnchors.anchors) {
+        const a = anchor as Entity & { connectedLines?: Set<Entity> }
+        a.connectedLines?.delete(line)
+        if (!a.connectedLines || a.connectedLines.size === 0) {
+          viewer.entities.remove(a)
+          anchorsRef.current = anchorsRef.current.filter((e) => e !== a)
+          if (selectedAnchorRef.current === a) {
+            selectedAnchorRef.current = null
+          }
+        }
+      }
+    }
+  }, [])
+
+  const removeAnchor = useCallback(
+    (anchor: Entity, viewer: Viewer) => {
+      viewer.entities.remove(anchor)
+      anchorsRef.current = anchorsRef.current.filter((e) => e !== anchor)
+      const anchorWithLines = anchor as Entity & { connectedLines?: Set<Entity> }
+      if (anchorWithLines.connectedLines) {
+        for (const line of Array.from(anchorWithLines.connectedLines)) {
+          removeLine(line, viewer)
+        }
+      }
+    },
+    [removeLine],
+  )
 
   const addAnchor = (position: Cartesian3) => {
     const viewer = viewerRef.current
@@ -270,39 +302,10 @@ const CesiumViewer = () => {
       if (event.key === 'Delete' && viewerRef.current) {
         const viewer = viewerRef.current
         if (selectedLineRef.current) {
-          const line = selectedLineRef.current as Entity & {
-            anchors?: [Entity, Entity]
-          }
-          viewer.entities.remove(line)
-          if (line.anchors) {
-            for (const anchor of line.anchors) {
-              const a = anchor as Entity & { connectedLines?: Set<Entity> }
-              a.connectedLines?.delete(line)
-              if (!a.connectedLines || a.connectedLines.size === 0) {
-                viewer.entities.remove(a)
-                anchorsRef.current = anchorsRef.current.filter((e) => e !== a)
-                if (selectedAnchorRef.current === a) {
-                  selectedAnchorRef.current = null
-                }
-              }
-            }
-          }
+          removeLine(selectedLineRef.current, viewer)
           selectedLineRef.current = null
         } else if (selectedAnchorRef.current) {
-          const anchor = selectedAnchorRef.current as Entity & {
-            connectedLines?: Set<Entity>
-          }
-          viewer.entities.remove(anchor)
-          anchorsRef.current = anchorsRef.current.filter((e) => e !== anchor)
-          anchor.connectedLines?.forEach((line) => {
-            const l = line as Entity & { anchors?: [Entity, Entity] }
-            if (l.anchors) {
-              l.anchors = l.anchors.filter((a) => a !== anchor) as [
-                Entity,
-                Entity
-              ]
-            }
-          })
+          removeAnchor(selectedAnchorRef.current, viewer)
           selectedAnchorRef.current = null
         }
       }
@@ -311,7 +314,7 @@ const CesiumViewer = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isLineMode])
+  }, [isLineMode, removeLine, removeAnchor])
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
