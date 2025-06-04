@@ -72,8 +72,9 @@ const CesiumViewer = () => {
         }
 
         const centerCart = Cartographic.fromCartesian(bs.center)
-        const metersPerDegree = 111319.9
-        const deltaRad = ((bs.radius ?? 1) / metersPerDegree) * (Math.PI / 180)
+        // use earth radius in meters for radian conversion
+        const earthRadius = 6378137
+        const deltaRad = ((bs.radius ?? 1) + 10) / earthRadius
 
         const positions = [
           Cartesian3.fromRadians(centerCart.longitude - deltaRad, centerCart.latitude - deltaRad, 0),
