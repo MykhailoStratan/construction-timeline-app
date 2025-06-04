@@ -138,10 +138,13 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         drawingLineRef.current = null
       }
       if (startAnchorRef.current) {
-        viewer.entities.remove(startAnchorRef.current)
-        anchorsRef.current = anchorsRef.current.filter(
-          (a) => a !== startAnchorRef.current,
-        )
+        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        if (anchor.connectedLines.size === 0) {
+          viewer.entities.remove(startAnchorRef.current)
+          anchorsRef.current = anchorsRef.current.filter(
+            (a) => a !== startAnchorRef.current,
+          )
+        }
         startAnchorRef.current = null
       }
       startPositionRef.current = null
@@ -213,12 +216,43 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         ]
         ;(startAnchorRef.current! as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
-        drawingLineRef.current = null
-        startAnchorRef.current = null
-        startPositionRef.current = null
-        mousePositionRef.current = null
-        isDrawing = false
+        startPositionRef.current = position
+        startAnchorRef.current = endAnchor
+        mousePositionRef.current = position
+        const dynamicPositions = new CallbackProperty(() => {
+          if (!startPositionRef.current || !mousePositionRef.current) {
+            return []
+          }
+          return [startPositionRef.current, mousePositionRef.current]
+        }, false)
+        drawingLineRef.current = viewer.entities.add({
+          polyline: {
+            positions: dynamicPositions,
+            width: new ConstantProperty(2),
+            material: new ColorMaterialProperty(Color.YELLOW),
+            clampToGround: true,
+          },
+        })
+        isDrawing = true
       }
+    }, ScreenSpaceEventType.LEFT_CLICK)
+
+    handler.setInputAction(() => {
+      if (drawingLineRef.current) {
+        viewer.entities.remove(drawingLineRef.current)
+        drawingLineRef.current = null
+      }
+      if (startAnchorRef.current) {
+        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        if (anchor.connectedLines.size === 0) {
+          viewer.entities.remove(startAnchorRef.current)
+          anchorsRef.current = anchorsRef.current.filter((a) => a !== startAnchorRef.current)
+        }
+        startAnchorRef.current = null
+      }
+      startPositionRef.current = null
+      mousePositionRef.current = null
+      isDrawing = false
     }, ScreenSpaceEventType.RIGHT_CLICK)
 
     handler.setInputAction((movement: ScreenSpaceEventHandler.MotionEvent) => {
@@ -307,10 +341,13 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           drawingLineRef.current = null
         }
         if (startAnchorRef.current) {
-          viewer?.entities.remove(startAnchorRef.current)
-          anchorsRef.current = anchorsRef.current.filter(
-            (a) => a !== startAnchorRef.current,
-          )
+          const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+          if (anchor.connectedLines.size === 0) {
+            viewer?.entities.remove(startAnchorRef.current)
+            anchorsRef.current = anchorsRef.current.filter(
+              (a) => a !== startAnchorRef.current,
+            )
+          }
           startAnchorRef.current = null
         }
         startPositionRef.current = null
