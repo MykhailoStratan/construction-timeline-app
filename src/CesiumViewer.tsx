@@ -16,9 +16,6 @@ import {
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
-interface FeatureWithBoundingSphere extends Cesium3DTileFeature {
-  boundingSphere: BoundingSphere
-}
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
 if (ionToken) {
@@ -59,21 +56,30 @@ const CesiumViewer = () => {
           return
         }
 
-        const feature = picked as FeatureWithBoundingSphere
-        const bs = feature.boundingSphere
+        const feature = picked as Cesium3DTileFeature & {
+          content?: {
+            tile?: {
+              contentBoundingVolume?: { boundingSphere: BoundingSphere }
+              boundingSphere?: BoundingSphere
+            }
+          }
+        }
+        const tile = feature.content?.tile
+        const bs =
+          tile?.contentBoundingVolume?.boundingSphere ?? tile?.boundingSphere
         if (!bs) {
           return
         }
 
         const centerCart = Cartographic.fromCartesian(bs.center)
         const metersPerDegree = 111319.9
-        const delta = (bs.radius ?? 1) / metersPerDegree
+        const deltaRad = ((bs.radius ?? 1) / metersPerDegree) * (Math.PI / 180)
 
         const positions = [
-          Cartesian3.fromRadians(centerCart.longitude - delta, centerCart.latitude - delta, 0),
-          Cartesian3.fromRadians(centerCart.longitude + delta, centerCart.latitude - delta, 0),
-          Cartesian3.fromRadians(centerCart.longitude + delta, centerCart.latitude + delta, 0),
-          Cartesian3.fromRadians(centerCart.longitude - delta, centerCart.latitude + delta, 0),
+          Cartesian3.fromRadians(centerCart.longitude - deltaRad, centerCart.latitude - deltaRad, 0),
+          Cartesian3.fromRadians(centerCart.longitude + deltaRad, centerCart.latitude - deltaRad, 0),
+          Cartesian3.fromRadians(centerCart.longitude + deltaRad, centerCart.latitude + deltaRad, 0),
+          Cartesian3.fromRadians(centerCart.longitude - deltaRad, centerCart.latitude + deltaRad, 0),
         ]
 
         if (footprintEntity) {
@@ -90,7 +96,11 @@ const CesiumViewer = () => {
       }, ScreenSpaceEventType.LEFT_CLICK)
 
       viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(-123.102943, 49.271094, 4000),
+        destination: Cartesian3.fromDegrees(
+          -123.102943,
+          49.271094,
+          4000,
+        ),
       })
     }
 
