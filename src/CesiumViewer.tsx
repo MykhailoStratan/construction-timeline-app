@@ -10,6 +10,7 @@ import {
   OrientedBoundingBox,
   ClassificationType,
   Color,
+  HeightReference,
   Cartographic,
   Math as CesiumMath,
   Cesium3DTileFeature,
@@ -19,7 +20,7 @@ import {
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 interface TileFeatureWithContent extends Cesium3DTileFeature {
-  content?: { tile?: { boundingVolume?: unknown } }
+  content?: { boundingVolume?: unknown }
 }
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
@@ -49,7 +50,7 @@ const CesiumViewer = () => {
         const handler = viewer.screenSpaceEventHandler
 
         const createFootprint = (feature: TileFeatureWithContent) => {
-          const bv = feature.content?.tile?.boundingVolume as OrientedBoundingBox | undefined
+          const bv = feature.content?.boundingVolume as OrientedBoundingBox | undefined
           if (bv instanceof OrientedBoundingBox) {
             const center = bv.center
             const halfAxes = bv.halfAxes
@@ -83,6 +84,7 @@ const CesiumViewer = () => {
                 outline: true,
                 outlineColor: Color.YELLOW,
                 classificationType: ClassificationType.BOTH,
+                heightReference: HeightReference.CLAMP_TO_GROUND,
               },
             })
             footprintEntities.current.push(entity)
