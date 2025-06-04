@@ -7,6 +7,8 @@ import {
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   Color,
+  ColorMaterialProperty,
+  ConstantProperty,
   Cartesian3,
   Entity,
   HeightReference,
@@ -90,8 +92,8 @@ const CesiumViewer = () => {
         const line = viewer.entities.add({
           polyline: {
             positions: [startPositionRef.current!, position],
-            width: 2,
-            material: Color.YELLOW,
+            width: new ConstantProperty(2),
+            material: new ColorMaterialProperty(Color.YELLOW),
             clampToGround: true,
           },
         })
@@ -135,19 +137,19 @@ const CesiumViewer = () => {
             ) {
               const prev = selectedLineRef.current
               if (prev.polyline) {
-                prev.polyline.material = Color.YELLOW
-                prev.polyline.width = 2
+                prev.polyline.material = new ColorMaterialProperty(Color.YELLOW)
+                prev.polyline.width = new ConstantProperty(2)
               }
             }
             selectedLineRef.current = picked.id as Entity
             if (selectedLineRef.current.polyline) {
-              selectedLineRef.current.polyline.material = Color.RED
-              selectedLineRef.current.polyline.width = 3
+              selectedLineRef.current.polyline.material = new ColorMaterialProperty(Color.RED)
+              selectedLineRef.current.polyline.width = new ConstantProperty(3)
             }
           } else if (selectedLineRef.current) {
             if (selectedLineRef.current.polyline) {
-              selectedLineRef.current.polyline.material = Color.YELLOW
-              selectedLineRef.current.polyline.width = 2
+              selectedLineRef.current.polyline.material = new ColorMaterialProperty(Color.YELLOW)
+              selectedLineRef.current.polyline.width = new ConstantProperty(2)
             }
             selectedLineRef.current = null
           }
