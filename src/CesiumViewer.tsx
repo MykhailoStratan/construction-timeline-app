@@ -47,6 +47,7 @@ const CesiumViewer = () => {
             positions: [startPositionRef.current!, position],
             width: 2,
             material: Color.YELLOW,
+            clampToGround: true,
           },
         })
         handler.destroy()
@@ -95,6 +96,11 @@ const CesiumViewer = () => {
           position: 'absolute',
           top: 0,
           left: 0,
+          bottom: 0,
+          width: '60px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
           padding: '8px',
           backgroundColor: 'rgba(0,0,0,0.3)',
         }}
