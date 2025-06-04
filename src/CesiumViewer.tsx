@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Viewer,
   Ion,
@@ -23,6 +23,7 @@ const CesiumViewer = () => {
   const viewerRef = useRef<Viewer | null>(null)
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
+  const [isLineMode, setIsLineMode] = useState(false)
 
   const addAnchor = (position: Cartesian3) => {
     const viewer = viewerRef.current
@@ -47,9 +48,18 @@ const CesiumViewer = () => {
     if (!viewer) {
       return
     }
-    drawHandlerRef.current?.destroy()
+
+    if (drawHandlerRef.current) {
+      drawHandlerRef.current.destroy()
+      drawHandlerRef.current = null
+      setIsLineMode(false)
+      return
+    }
+
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     drawHandlerRef.current = handler
+    setIsLineMode(true)
+
     let firstClick = true
     const getClickPosition = (
       event: ScreenSpaceEventHandler.PositionedEvent,
@@ -124,6 +134,20 @@ const CesiumViewer = () => {
     }
   }, [])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && drawHandlerRef.current) {
+        drawHandlerRef.current.destroy()
+        drawHandlerRef.current = null
+        setIsLineMode(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isLineMode])
+
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
       <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
@@ -141,7 +165,12 @@ const CesiumViewer = () => {
           backgroundColor: 'rgba(0,0,0,0.3)',
         }}
       >
-        <button onClick={startLineMode}>Line</button>
+        <button
+          onClick={startLineMode}
+          style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
+        >
+          Line
+        </button>
       </div>
     </div>
   )
