@@ -8,6 +8,8 @@ import {
   ScreenSpaceEventType,
   Color,
   Cartesian3,
+  Entity,
+  HeightReference,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
@@ -22,6 +24,24 @@ const CesiumViewer = () => {
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
 
+  const addAnchor = (position: Cartesian3) => {
+    const viewer = viewerRef.current
+    if (!viewer) {
+      return
+    }
+    const anchor: Entity = viewer.entities.add({
+      position,
+      point: {
+        pixelSize: 8,
+        color: Color.ORANGE,
+        outlineColor: Color.WHITE,
+        outlineWidth: 1,
+        heightReference: HeightReference.CLAMP_TO_GROUND,
+      },
+    })
+    ;(anchor as Entity & { isAnchor: boolean }).isAnchor = true
+  }
+
   const startLineMode = () => {
     const viewer = viewerRef.current
     if (!viewer) {
@@ -31,10 +51,23 @@ const CesiumViewer = () => {
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     drawHandlerRef.current = handler
     let firstClick = true
-    handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
-      const position =
+    const getClickPosition = (
+      event: ScreenSpaceEventHandler.PositionedEvent,
+    ): Cartesian3 | null => {
+      const picked = viewer.scene.pick(event.position)
+      if (picked) {
+        const entity = picked.id as Entity & { isAnchor?: boolean }
+        if (entity.isAnchor) {
+          return entity.position?.getValue(viewer.clock.currentTime) || null
+        }
+      }
+      return (
         viewer.scene.pickPosition(event.position) ||
         viewer.camera.pickEllipsoid(event.position)
+      )
+    }
+    handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
+      const position = getClickPosition(event)
       if (!position) {
         return
       }
@@ -50,6 +83,8 @@ const CesiumViewer = () => {
             clampToGround: true,
           },
         })
+        addAnchor(startPositionRef.current!)
+        addAnchor(position)
         handler.destroy()
         drawHandlerRef.current = null
       }
@@ -76,7 +111,7 @@ const CesiumViewer = () => {
       }
 
       viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(-123.102943, 49.271094, 4000),
+        destination: Cartesian3.fromDegrees(-123.102943, 49.271094, 4000),
       })
     }
 
