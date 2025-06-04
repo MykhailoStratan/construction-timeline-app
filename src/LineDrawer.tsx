@@ -178,10 +178,20 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         ]
         ;(startAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
+        startPositionRef.current = position
+        firstClick = false
+      }
+    }, ScreenSpaceEventType.LEFT_CLICK)
+    handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
+      const position = getClickPosition(event)
+      if (position) {
+        startPositionRef.current = position
+        firstClick = false
+      } else {
         startPositionRef.current = null
         firstClick = true
       }
-    }, ScreenSpaceEventType.LEFT_CLICK)
+    }, ScreenSpaceEventType.RIGHT_CLICK)
   }
 
   useEffect(() => {
