@@ -13,10 +13,10 @@ import {
 } from 'cesium'
 
 interface LineDrawerProps {
-  viewerRef: React.MutableRefObject<Viewer | null>
+  viewer: Viewer | null
 }
 
-const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
+const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
@@ -53,7 +53,11 @@ const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
     }
   }
 
-  const removeLine = useCallback((line: Entity, viewer: Viewer) => {
+  const removeLine = useCallback(
+    (line: Entity) => {
+    if (!viewer) {
+      return
+    }
     viewer.entities.remove(line)
     const lineWithAnchors = line as Entity & { anchors?: [Entity, Entity] }
     if (lineWithAnchors.anchors) {
@@ -69,24 +73,28 @@ const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
         }
       }
     }
-  }, [])
+    },
+    [viewer],
+  )
 
   const removeAnchor = useCallback(
-    (anchor: Entity, viewer: Viewer) => {
+    (anchor: Entity) => {
+      if (!viewer) {
+        return
+      }
       viewer.entities.remove(anchor)
       anchorsRef.current = anchorsRef.current.filter((e) => e !== anchor)
       const anchorWithLines = anchor as Entity & { connectedLines?: Set<Entity> }
       if (anchorWithLines.connectedLines) {
         for (const line of Array.from(anchorWithLines.connectedLines)) {
-          removeLine(line, viewer)
+          removeLine(line)
         }
       }
     },
-    [removeLine],
+    [removeLine, viewer],
   )
 
   const addAnchor = (position: Cartesian3) => {
-    const viewer = viewerRef.current
     if (!viewer) {
       return null
     }
@@ -113,7 +121,6 @@ const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
   }
 
   const startLineMode = () => {
-    const viewer = viewerRef.current
     if (!viewer) {
       return
     }
@@ -178,7 +185,6 @@ const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
   }
 
   useEffect(() => {
-    const viewer = viewerRef.current
     if (!viewer) {
       return
     }
@@ -240,7 +246,7 @@ const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
       selectionHandlerRef.current?.destroy()
       selectionHandlerRef.current = null
     }
-  }, [viewerRef])
+  }, [viewer])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -249,13 +255,12 @@ const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
         drawHandlerRef.current = null
         setIsLineMode(false)
       }
-      if (event.key === 'Delete' && viewerRef.current) {
-        const viewer = viewerRef.current
+      if (event.key === 'Delete' && viewer) {
         if (selectedLineRef.current) {
-          removeLine(selectedLineRef.current, viewer)
+          removeLine(selectedLineRef.current)
           selectedLineRef.current = null
         } else if (selectedAnchorRef.current) {
-          removeAnchor(selectedAnchorRef.current, viewer)
+          removeAnchor(selectedAnchorRef.current)
           selectedAnchorRef.current = null
         }
       }
@@ -264,7 +269,7 @@ const LineDrawer = ({ viewerRef }: LineDrawerProps) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isLineMode, removeLine, removeAnchor, viewerRef])
+  }, [isLineMode, removeLine, removeAnchor, viewer])
 
   return (
     <div

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Viewer,
   Ion,
@@ -17,6 +17,7 @@ if (ionToken) {
 const CesiumViewer = () => {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
+  const [viewer, setViewer] = useState<Viewer | null>(null)
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -29,6 +30,7 @@ const CesiumViewer = () => {
       const terrainProvider = await createWorldTerrainAsync()
       viewer = new Viewer(containerRef.current!, { terrainProvider })
       viewerRef.current = viewer
+      setViewer(viewer)
 
       try {
         const osmBuildings = await createOsmBuildingsAsync()
@@ -46,13 +48,14 @@ const CesiumViewer = () => {
 
     return () => {
       viewer?.destroy()
+      setViewer(null)
     }
   }, [])
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
       <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
-      <LineDrawer viewerRef={viewerRef} />
+      <LineDrawer viewer={viewer} />
     </div>
   )
 }
