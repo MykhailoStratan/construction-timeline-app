@@ -182,9 +182,15 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         firstClick = false
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
-    handler.setInputAction(() => {
-      startPositionRef.current = null
-      firstClick = true
+    handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
+      const position = getClickPosition(event)
+      if (position) {
+        startPositionRef.current = position
+        firstClick = false
+      } else {
+        startPositionRef.current = null
+        firstClick = true
+      }
     }, ScreenSpaceEventType.RIGHT_CLICK)
   }
 
