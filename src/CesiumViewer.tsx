@@ -32,6 +32,10 @@ const CesiumViewer = () => {
       } catch (error) {
         console.error('Error loading OSM Buildings', error)
       }
+
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(-123.102943, 49.271094, 4000),
+      })
     }
 
     initialize()
