@@ -4,6 +4,10 @@ import {
   Ion,
   createWorldTerrainAsync,
   createOsmBuildingsAsync,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  Color,
+  Cartesian3,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
@@ -14,6 +18,42 @@ if (ionToken) {
 
 const CesiumViewer = () => {
   const containerRef = useRef<HTMLDivElement>(null)
+  const viewerRef = useRef<Viewer | null>(null)
+  const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
+  const startPositionRef = useRef<Cartesian3 | null>(null)
+
+  const startLineMode = () => {
+    const viewer = viewerRef.current
+    if (!viewer) {
+      return
+    }
+    drawHandlerRef.current?.destroy()
+    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+    drawHandlerRef.current = handler
+    let firstClick = true
+    handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
+      const position =
+        viewer.scene.pickPosition(event.position) ||
+        viewer.camera.pickEllipsoid(event.position)
+      if (!position) {
+        return
+      }
+      if (firstClick) {
+        startPositionRef.current = position
+        firstClick = false
+      } else {
+        viewer.entities.add({
+          polyline: {
+            positions: [startPositionRef.current!, position],
+            width: 2,
+            material: Color.YELLOW,
+          },
+        })
+        handler.destroy()
+        drawHandlerRef.current = null
+      }
+    }, ScreenSpaceEventType.LEFT_CLICK)
+  }
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -25,6 +65,7 @@ const CesiumViewer = () => {
     const initialize = async () => {
       const terrainProvider = await createWorldTerrainAsync()
       viewer = new Viewer(containerRef.current!, { terrainProvider })
+      viewerRef.current = viewer
 
       try {
         const osmBuildings = await createOsmBuildingsAsync()
@@ -42,10 +83,26 @@ const CesiumViewer = () => {
 
     return () => {
       viewer?.destroy()
+      drawHandlerRef.current?.destroy()
     }
   }, [])
 
-  return <div ref={containerRef} style={{ height: '100vh', width: '100%' }} />
+  return (
+    <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
+      <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          padding: '8px',
+          backgroundColor: 'rgba(0,0,0,0.3)',
+        }}
+      >
+        <button onClick={startLineMode}>Line</button>
+      </div>
+    </div>
+  )
 }
 
 export default CesiumViewer
