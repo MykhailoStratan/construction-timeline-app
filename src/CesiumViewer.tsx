@@ -85,8 +85,9 @@ const CesiumViewer = () => {
         })
         addAnchor(startPositionRef.current!)
         addAnchor(position)
-        handler.destroy()
-        drawHandlerRef.current = null
+        // prepare for drawing the next line without leaving line mode
+        startPositionRef.current = null
+        firstClick = true
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
   }
