@@ -22,7 +22,9 @@ const CesiumViewer = () => {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
+  const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
+  const selectedLineRef = useRef<Entity | null>(null)
   const [isLineMode, setIsLineMode] = useState(false)
 
   const addAnchor = (position: Cartesian3) => {
@@ -85,7 +87,7 @@ const CesiumViewer = () => {
         startPositionRef.current = position
         firstClick = false
       } else {
-        viewer.entities.add({
+        const line = viewer.entities.add({
           polyline: {
             positions: [startPositionRef.current!, position],
             width: 2,
@@ -93,6 +95,7 @@ const CesiumViewer = () => {
             clampToGround: true,
           },
         })
+        ;(line as Entity & { isLine: boolean }).isLine = true
         addAnchor(startPositionRef.current!)
         addAnchor(position)
         // prepare for drawing the next line without leaving line mode
@@ -114,6 +117,44 @@ const CesiumViewer = () => {
       viewer = new Viewer(containerRef.current!, { terrainProvider })
       viewerRef.current = viewer
 
+      const selectionHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+      selectionHandlerRef.current = selectionHandler
+      selectionHandler.setInputAction(
+        (event: ScreenSpaceEventHandler.PositionedEvent) => {
+          if (drawHandlerRef.current) {
+            return
+          }
+          const picked = viewer!.scene.pick(event.position)
+          if (
+            picked &&
+            (picked.id as Entity & { isLine?: boolean }).isLine
+          ) {
+            if (
+              selectedLineRef.current &&
+              selectedLineRef.current !== picked.id
+            ) {
+              const prev = selectedLineRef.current
+              if (prev.polyline) {
+                prev.polyline.material = Color.YELLOW
+                prev.polyline.width = 2
+              }
+            }
+            selectedLineRef.current = picked.id as Entity
+            if (selectedLineRef.current.polyline) {
+              selectedLineRef.current.polyline.material = Color.RED
+              selectedLineRef.current.polyline.width = 3
+            }
+          } else if (selectedLineRef.current) {
+            if (selectedLineRef.current.polyline) {
+              selectedLineRef.current.polyline.material = Color.YELLOW
+              selectedLineRef.current.polyline.width = 2
+            }
+            selectedLineRef.current = null
+          }
+        },
+        ScreenSpaceEventType.LEFT_CLICK,
+      )
+
       try {
         const osmBuildings = await createOsmBuildingsAsync()
         viewer.scene.primitives.add(osmBuildings)
@@ -131,6 +172,7 @@ const CesiumViewer = () => {
     return () => {
       viewer?.destroy()
       drawHandlerRef.current?.destroy()
+      selectionHandlerRef.current?.destroy()
     }
   }, [])
 
@@ -140,6 +182,10 @@ const CesiumViewer = () => {
         drawHandlerRef.current.destroy()
         drawHandlerRef.current = null
         setIsLineMode(false)
+      }
+      if (event.key === 'Delete' && selectedLineRef.current && viewerRef.current) {
+        viewerRef.current.entities.remove(selectedLineRef.current)
+        selectedLineRef.current = null
       }
     }
     window.addEventListener('keydown', handleKeyDown)
