@@ -212,7 +212,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         mousePositionRef.current = null
         isDrawing = false
       }
-    }, ScreenSpaceEventType.RIGHT_CLICK)
+    }, ScreenSpaceEventType.LEFT_CLICK)
 
     handler.setInputAction((movement: ScreenSpaceEventHandler.MotionEvent) => {
       if (!drawingLineRef.current) {
