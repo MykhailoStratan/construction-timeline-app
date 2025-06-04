@@ -178,10 +178,14 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         ]
         ;(startAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
-        startPositionRef.current = null
-        firstClick = true
+        startPositionRef.current = position
+        firstClick = false
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
+    handler.setInputAction(() => {
+      startPositionRef.current = null
+      firstClick = true
+    }, ScreenSpaceEventType.RIGHT_CLICK)
   }
 
   useEffect(() => {
