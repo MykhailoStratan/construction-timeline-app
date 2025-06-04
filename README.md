@@ -13,6 +13,16 @@ VITE_CESIUM_ION_ACCESS_TOKEN=your_token_here
 Copy `.env.example` to `.env` and replace the placeholder value. The `.env` file
 is gitignored so your token remains private.
 
+## Ion SDK Measurement widget
+
+The viewer uses the `IonSdkMeasurements` library to add distance measuring tools.
+Include the script in `index.html` so the global `IonSdkMeasurements` object is
+available:
+
+```html
+<script src="https://cdn.cesium.com/ion-sdk/latest/IonSdkMeasurements.js"></script>
+```
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh

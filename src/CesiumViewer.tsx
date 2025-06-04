@@ -13,6 +13,12 @@ import {
   Entity,
   HeightReference,
 } from 'cesium'
+// Ion SDK provides measurement utilities via the global IonSdkMeasurements
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+declare const IonSdkMeasurements: {
+  Measure: new (viewer: Viewer) => { start: () => void; destroy: () => void }
+}
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
@@ -30,6 +36,10 @@ const CesiumViewer = () => {
   const selectedAnchorRef = useRef<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
   const [isLineMode, setIsLineMode] = useState(false)
+  const measureRef = useRef<{ start: () => void; destroy: () => void } | null>(
+    null,
+  )
+  const [isMeasureMode, setIsMeasureMode] = useState(false)
 
   const highlightLine = (line: Entity) => {
     if (line.polyline) {
@@ -203,6 +213,25 @@ const CesiumViewer = () => {
     }, ScreenSpaceEventType.LEFT_CLICK)
   }
 
+  const startMeasureMode = () => {
+    const viewer = viewerRef.current
+    if (!viewer) {
+      return
+    }
+
+    if (measureRef.current) {
+      measureRef.current.destroy()
+      measureRef.current = null
+      setIsMeasureMode(false)
+      return
+    }
+
+    const measure = new IonSdkMeasurements.Measure(viewer)
+    measure.start?.()
+    measureRef.current = measure
+    setIsMeasureMode(true)
+  }
+
   useEffect(() => {
     if (!containerRef.current) {
       return
@@ -289,15 +318,23 @@ const CesiumViewer = () => {
       viewer?.destroy()
       drawHandlerRef.current?.destroy()
       selectionHandlerRef.current?.destroy()
+      measureRef.current?.destroy()
     }
   }, [])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && drawHandlerRef.current) {
-        drawHandlerRef.current.destroy()
-        drawHandlerRef.current = null
-        setIsLineMode(false)
+      if (event.key === 'Escape') {
+        if (drawHandlerRef.current) {
+          drawHandlerRef.current.destroy()
+          drawHandlerRef.current = null
+          setIsLineMode(false)
+        }
+        if (measureRef.current) {
+          measureRef.current.destroy()
+          measureRef.current = null
+          setIsMeasureMode(false)
+        }
       }
       if (event.key === 'Delete' && viewerRef.current) {
         const viewer = viewerRef.current
@@ -314,7 +351,7 @@ const CesiumViewer = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isLineMode, removeLine, removeAnchor])
+  }, [isLineMode, isMeasureMode, removeLine, removeAnchor])
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
@@ -338,6 +375,14 @@ const CesiumViewer = () => {
           style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
         >
           Line
+        </button>
+        <button
+          onClick={startMeasureMode}
+          style={{
+            border: isMeasureMode ? '2px solid yellow' : '1px solid gray',
+          }}
+        >
+          Measure
         </button>
       </div>
     </div>
