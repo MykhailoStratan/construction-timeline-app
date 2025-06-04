@@ -23,6 +23,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
+  const tempLineRef = useRef<Entity | null>(null)
+  const tempStartAnchorRef = useRef<Entity | null>(null)
   const [isLineMode, setIsLineMode] = useState(false)
 
   const highlightLine = (line: Entity) => {
@@ -128,6 +130,15 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     if (drawHandlerRef.current) {
       drawHandlerRef.current.destroy()
       drawHandlerRef.current = null
+      if (tempLineRef.current) {
+        viewer.entities.remove(tempLineRef.current)
+        tempLineRef.current = null
+      }
+      if (tempStartAnchorRef.current) {
+        removeAnchor(tempStartAnchorRef.current)
+        tempStartAnchorRef.current = null
+      }
+      startPositionRef.current = null
       setIsLineMode(false)
       return
     }
@@ -158,10 +169,20 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         return
       }
       if (firstClick) {
+        const anchor = addAnchor(position)!
+        tempStartAnchorRef.current = anchor
         startPositionRef.current = position
+        tempLineRef.current = viewer.entities.add({
+          polyline: {
+            positions: [position, position],
+            width: new ConstantProperty(2),
+            material: new ColorMaterialProperty(Color.YELLOW),
+            clampToGround: true,
+          },
+        })
         firstClick = false
       } else {
-        const startAnchor = addAnchor(startPositionRef.current!)!
+        const startAnchor = tempStartAnchorRef.current!
         const endAnchor = addAnchor(position)!
         const line = viewer.entities.add({
           polyline: {
@@ -178,14 +199,29 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         ]
         ;(startAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
-        startPositionRef.current = position
-        firstClick = false
+        if (tempLineRef.current) {
+          viewer.entities.remove(tempLineRef.current)
+          tempLineRef.current = null
+        }
+        tempStartAnchorRef.current = null
+        startPositionRef.current = null
+        firstClick = true
       }
-    }, ScreenSpaceEventType.LEFT_CLICK)
-    handler.setInputAction(() => {
-      startPositionRef.current = null
-      firstClick = true
     }, ScreenSpaceEventType.RIGHT_CLICK)
+
+    handler.setInputAction((movement: ScreenSpaceEventHandler.MotionEvent) => {
+      if (!firstClick && tempLineRef.current) {
+        const end =
+          viewer.scene.pickPosition(movement.endPosition) ||
+          viewer.camera.pickEllipsoid(movement.endPosition)
+        if (end) {
+          tempLineRef.current.polyline!.positions = new ConstantProperty([
+            startPositionRef.current!,
+            end,
+          ])
+        }
+      }
+    }, ScreenSpaceEventType.MOUSE_MOVE)
   }
 
   useEffect(() => {
@@ -257,6 +293,15 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       if (event.key === 'Escape' && drawHandlerRef.current) {
         drawHandlerRef.current.destroy()
         drawHandlerRef.current = null
+        if (tempLineRef.current && viewer) {
+          viewer.entities.remove(tempLineRef.current)
+          tempLineRef.current = null
+        }
+        if (tempStartAnchorRef.current) {
+          removeAnchor(tempStartAnchorRef.current)
+          tempStartAnchorRef.current = null
+        }
+        startPositionRef.current = null
         setIsLineMode(false)
       }
       if (event.key === 'Delete' && viewer) {
