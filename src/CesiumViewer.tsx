@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Viewer,
   Ion,
@@ -27,12 +27,80 @@ const CesiumViewer = () => {
   const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
   const selectedLineRef = useRef<Entity | null>(null)
+  const selectedAnchorRef = useRef<Entity | null>(null)
+  const anchorsRef = useRef<Entity[]>([])
   const [isLineMode, setIsLineMode] = useState(false)
+
+  const highlightLine = (line: Entity) => {
+    if (line.polyline) {
+      line.polyline.material = new ColorMaterialProperty(Color.RED)
+      line.polyline.width = new ConstantProperty(3)
+    }
+  }
+
+  const unhighlightLine = (line: Entity) => {
+    if (line.polyline) {
+      line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
+      line.polyline.width = new ConstantProperty(2)
+    }
+  }
+
+  const highlightAnchor = (anchor: Entity) => {
+    if (anchor.point) {
+      anchor.point.color = new ConstantProperty(Color.RED)
+      anchor.point.pixelSize = new ConstantProperty(10)
+    }
+  }
+
+  const unhighlightAnchor = (anchor: Entity) => {
+    if (anchor.point) {
+      anchor.point.color = new ConstantProperty(Color.ORANGE)
+      anchor.point.pixelSize = new ConstantProperty(8)
+    }
+  }
+
+  const removeLine = useCallback((line: Entity, viewer: Viewer) => {
+    viewer.entities.remove(line)
+    const lineWithAnchors = line as Entity & { anchors?: [Entity, Entity] }
+    if (lineWithAnchors.anchors) {
+      for (const anchor of lineWithAnchors.anchors) {
+        const a = anchor as Entity & { connectedLines?: Set<Entity> }
+        a.connectedLines?.delete(line)
+        if (!a.connectedLines || a.connectedLines.size === 0) {
+          viewer.entities.remove(a)
+          anchorsRef.current = anchorsRef.current.filter((e) => e !== a)
+          if (selectedAnchorRef.current === a) {
+            selectedAnchorRef.current = null
+          }
+        }
+      }
+    }
+  }, [])
+
+  const removeAnchor = useCallback(
+    (anchor: Entity, viewer: Viewer) => {
+      viewer.entities.remove(anchor)
+      anchorsRef.current = anchorsRef.current.filter((e) => e !== anchor)
+      const anchorWithLines = anchor as Entity & { connectedLines?: Set<Entity> }
+      if (anchorWithLines.connectedLines) {
+        for (const line of Array.from(anchorWithLines.connectedLines)) {
+          removeLine(line, viewer)
+        }
+      }
+    },
+    [removeLine],
+  )
 
   const addAnchor = (position: Cartesian3) => {
     const viewer = viewerRef.current
     if (!viewer) {
-      return
+      return null
+    }
+    for (const existing of anchorsRef.current) {
+      const pos = existing.position?.getValue(viewer.clock.currentTime)
+      if (pos && Cartesian3.distance(pos, position) < 1) {
+        return existing
+      }
     }
     const anchor: Entity = viewer.entities.add({
       position,
@@ -44,7 +112,14 @@ const CesiumViewer = () => {
         heightReference: HeightReference.CLAMP_TO_GROUND,
       },
     })
-    ;(anchor as Entity & { isAnchor: boolean }).isAnchor = true
+    ;(
+      anchor as Entity & { isAnchor: boolean; connectedLines: Set<Entity> }
+    ).isAnchor = true
+    ;(
+      anchor as Entity & { isAnchor: boolean; connectedLines: Set<Entity> }
+    ).connectedLines = new Set()
+    anchorsRef.current.push(anchor)
+    return anchor
   }
 
   const startLineMode = () => {
@@ -89,6 +164,8 @@ const CesiumViewer = () => {
         startPositionRef.current = position
         firstClick = false
       } else {
+        const startAnchor = addAnchor(startPositionRef.current!)!
+        const endAnchor = addAnchor(position)!
         const line = viewer.entities.add({
           polyline: {
             positions: [startPositionRef.current!, position],
@@ -97,9 +174,28 @@ const CesiumViewer = () => {
             clampToGround: true,
           },
         })
-        ;(line as Entity & { isLine: boolean }).isLine = true
-        addAnchor(startPositionRef.current!)
-        addAnchor(position)
+        ;(
+          line as Entity & {
+            isLine: boolean
+            anchors: [Entity, Entity]
+          }
+        ).isLine = true
+        ;(
+          line as Entity & {
+            isLine: boolean
+            anchors: [Entity, Entity]
+          }
+        ).anchors = [startAnchor, endAnchor]
+        ;(
+          startAnchor as Entity & {
+            connectedLines: Set<Entity>
+          }
+        ).connectedLines.add(line)
+        ;(
+          endAnchor as Entity & {
+            connectedLines: Set<Entity>
+          }
+        ).connectedLines.add(line)
         // prepare for drawing the next line without leaving line mode
         startPositionRef.current = null
         firstClick = true
@@ -127,31 +223,49 @@ const CesiumViewer = () => {
             return
           }
           const picked = viewer!.scene.pick(event.position)
-          if (
-            picked &&
-            (picked.id as Entity & { isLine?: boolean }).isLine
-          ) {
-            if (
-              selectedLineRef.current &&
-              selectedLineRef.current !== picked.id
-            ) {
-              const prev = selectedLineRef.current
-              if (prev.polyline) {
-                prev.polyline.material = new ColorMaterialProperty(Color.YELLOW)
-                prev.polyline.width = new ConstantProperty(2)
+          if (picked) {
+            const entity = picked.id as Entity & {
+              isLine?: boolean
+              isAnchor?: boolean
+            }
+            if (entity.isLine) {
+              if (
+                selectedLineRef.current &&
+                selectedLineRef.current !== entity
+              ) {
+                unhighlightLine(selectedLineRef.current)
               }
+              if (selectedAnchorRef.current) {
+                unhighlightAnchor(selectedAnchorRef.current)
+                selectedAnchorRef.current = null
+              }
+              selectedLineRef.current = entity
+              highlightLine(entity)
+              return
             }
-            selectedLineRef.current = picked.id as Entity
-            if (selectedLineRef.current.polyline) {
-              selectedLineRef.current.polyline.material = new ColorMaterialProperty(Color.RED)
-              selectedLineRef.current.polyline.width = new ConstantProperty(3)
+            if (entity.isAnchor) {
+              if (
+                selectedAnchorRef.current &&
+                selectedAnchorRef.current !== entity
+              ) {
+                unhighlightAnchor(selectedAnchorRef.current)
+              }
+              if (selectedLineRef.current) {
+                unhighlightLine(selectedLineRef.current)
+                selectedLineRef.current = null
+              }
+              selectedAnchorRef.current = entity
+              highlightAnchor(entity)
+              return
             }
-          } else if (selectedLineRef.current) {
-            if (selectedLineRef.current.polyline) {
-              selectedLineRef.current.polyline.material = new ColorMaterialProperty(Color.YELLOW)
-              selectedLineRef.current.polyline.width = new ConstantProperty(2)
-            }
+          }
+          if (selectedLineRef.current) {
+            unhighlightLine(selectedLineRef.current)
             selectedLineRef.current = null
+          }
+          if (selectedAnchorRef.current) {
+            unhighlightAnchor(selectedAnchorRef.current)
+            selectedAnchorRef.current = null
           }
         },
         ScreenSpaceEventType.LEFT_CLICK,
@@ -185,16 +299,22 @@ const CesiumViewer = () => {
         drawHandlerRef.current = null
         setIsLineMode(false)
       }
-      if (event.key === 'Delete' && selectedLineRef.current && viewerRef.current) {
-        viewerRef.current.entities.remove(selectedLineRef.current)
-        selectedLineRef.current = null
+      if (event.key === 'Delete' && viewerRef.current) {
+        const viewer = viewerRef.current
+        if (selectedLineRef.current) {
+          removeLine(selectedLineRef.current, viewer)
+          selectedLineRef.current = null
+        } else if (selectedAnchorRef.current) {
+          removeAnchor(selectedAnchorRef.current, viewer)
+          selectedAnchorRef.current = null
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isLineMode])
+  }, [isLineMode, removeLine, removeAnchor])
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
