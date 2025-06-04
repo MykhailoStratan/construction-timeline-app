@@ -14,8 +14,13 @@ import {
   Math as CesiumMath,
   Cesium3DTileFeature,
   Entity,
+  ScreenSpaceEventHandler,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+
+interface TileFeatureWithContent extends Cesium3DTileFeature {
+  content?: { tile?: { boundingVolume?: unknown } }
+}
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
 if (ionToken) {
@@ -43,8 +48,8 @@ const CesiumViewer = () => {
 
         const handler = viewer.screenSpaceEventHandler
 
-        const createFootprint = (feature: Cesium3DTileFeature) => {
-          const bv = feature.content?.tile?.boundingVolume
+        const createFootprint = (feature: TileFeatureWithContent) => {
+          const bv = feature.content?.tile?.boundingVolume as OrientedBoundingBox | undefined
           if (bv instanceof OrientedBoundingBox) {
             const center = bv.center
             const halfAxes = bv.halfAxes
@@ -55,13 +60,13 @@ const CesiumViewer = () => {
             const bottom = Cartesian3.subtract(center, zAxis, new Cartesian3())
 
             const c1 = Cartesian3.add(bottom, xAxis, new Cartesian3())
-            Cartesian3.addInPlace(c1, yAxis)
+            Cartesian3.add(c1, yAxis, c1)
             const c2 = Cartesian3.subtract(bottom, xAxis, new Cartesian3())
-            Cartesian3.addInPlace(c2, yAxis)
+            Cartesian3.add(c2, yAxis, c2)
             const c3 = Cartesian3.subtract(bottom, xAxis, new Cartesian3())
-            Cartesian3.subtractInPlace(c3, yAxis)
+            Cartesian3.subtract(c3, yAxis, c3)
             const c4 = Cartesian3.add(bottom, xAxis, new Cartesian3())
-            Cartesian3.subtractInPlace(c4, yAxis)
+            Cartesian3.subtract(c4, yAxis, c4)
 
             const toDegrees = (cart: Cartesian3) => {
               const c = Cartographic.fromCartesian(cart)
@@ -84,14 +89,14 @@ const CesiumViewer = () => {
           }
         }
 
-        handler.setInputAction((movement) => {
+        handler.setInputAction((movement: ScreenSpaceEventHandler.PositionedEvent) => {
           const picked = viewer!.scene.pick(movement.position)
           if (picked && picked instanceof Cesium3DTileFeature) {
-            createFootprint(picked)
+            createFootprint(picked as TileFeatureWithContent)
           }
         }, ScreenSpaceEventType.LEFT_CLICK)
 
-        handler.setInputAction((movement) => {
+        handler.setInputAction((movement: ScreenSpaceEventHandler.PositionedEvent) => {
           const picked = viewer!.scene.pick(movement.position)
           if (picked && (picked.id && picked.id.name === 'footprint')) {
             viewer!.entities.remove(picked.id)
