@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { Viewer } from 'cesium'
+import { Viewer, Ion } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+
+const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
+if (ionToken) {
+  Ion.defaultAccessToken = ionToken
+}
 
 const CesiumViewer = () => {
   const containerRef = useRef<HTMLDivElement>(null)
