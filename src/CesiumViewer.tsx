@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Viewer,
   Ion,
@@ -22,7 +22,10 @@ const CesiumViewer = () => {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
+  const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
+  const selectedLineRef = useRef<Entity | null>(null)
+  const [isLineMode, setIsLineMode] = useState(false)
 
   const addAnchor = (position: Cartesian3) => {
     const viewer = viewerRef.current
@@ -47,9 +50,18 @@ const CesiumViewer = () => {
     if (!viewer) {
       return
     }
-    drawHandlerRef.current?.destroy()
+
+    if (drawHandlerRef.current) {
+      drawHandlerRef.current.destroy()
+      drawHandlerRef.current = null
+      setIsLineMode(false)
+      return
+    }
+
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     drawHandlerRef.current = handler
+    setIsLineMode(true)
+
     let firstClick = true
     const getClickPosition = (
       event: ScreenSpaceEventHandler.PositionedEvent,
@@ -75,7 +87,7 @@ const CesiumViewer = () => {
         startPositionRef.current = position
         firstClick = false
       } else {
-        viewer.entities.add({
+        const line = viewer.entities.add({
           polyline: {
             positions: [startPositionRef.current!, position],
             width: 2,
@@ -83,10 +95,12 @@ const CesiumViewer = () => {
             clampToGround: true,
           },
         })
+        ;(line as Entity & { isLine: boolean }).isLine = true
         addAnchor(startPositionRef.current!)
         addAnchor(position)
-        handler.destroy()
-        drawHandlerRef.current = null
+        // prepare for drawing the next line without leaving line mode
+        startPositionRef.current = null
+        firstClick = true
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
   }
@@ -102,6 +116,44 @@ const CesiumViewer = () => {
       const terrainProvider = await createWorldTerrainAsync()
       viewer = new Viewer(containerRef.current!, { terrainProvider })
       viewerRef.current = viewer
+
+      const selectionHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+      selectionHandlerRef.current = selectionHandler
+      selectionHandler.setInputAction(
+        (event: ScreenSpaceEventHandler.PositionedEvent) => {
+          if (drawHandlerRef.current) {
+            return
+          }
+          const picked = viewer!.scene.pick(event.position)
+          if (
+            picked &&
+            (picked.id as Entity & { isLine?: boolean }).isLine
+          ) {
+            if (
+              selectedLineRef.current &&
+              selectedLineRef.current !== picked.id
+            ) {
+              const prev = selectedLineRef.current
+              if (prev.polyline) {
+                prev.polyline.material = Color.YELLOW
+                prev.polyline.width = 2
+              }
+            }
+            selectedLineRef.current = picked.id as Entity
+            if (selectedLineRef.current.polyline) {
+              selectedLineRef.current.polyline.material = Color.RED
+              selectedLineRef.current.polyline.width = 3
+            }
+          } else if (selectedLineRef.current) {
+            if (selectedLineRef.current.polyline) {
+              selectedLineRef.current.polyline.material = Color.YELLOW
+              selectedLineRef.current.polyline.width = 2
+            }
+            selectedLineRef.current = null
+          }
+        },
+        ScreenSpaceEventType.LEFT_CLICK,
+      )
 
       try {
         const osmBuildings = await createOsmBuildingsAsync()
@@ -120,8 +172,27 @@ const CesiumViewer = () => {
     return () => {
       viewer?.destroy()
       drawHandlerRef.current?.destroy()
+      selectionHandlerRef.current?.destroy()
     }
   }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && drawHandlerRef.current) {
+        drawHandlerRef.current.destroy()
+        drawHandlerRef.current = null
+        setIsLineMode(false)
+      }
+      if (event.key === 'Delete' && selectedLineRef.current && viewerRef.current) {
+        viewerRef.current.entities.remove(selectedLineRef.current)
+        selectedLineRef.current = null
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isLineMode])
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
@@ -140,7 +211,12 @@ const CesiumViewer = () => {
           backgroundColor: 'rgba(0,0,0,0.3)',
         }}
       >
-        <button onClick={startLineMode}>Line</button>
+        <button
+          onClick={startLineMode}
+          style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
+        >
+          Line
+        </button>
       </div>
     </div>
   )
