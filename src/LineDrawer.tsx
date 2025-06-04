@@ -4,6 +4,7 @@ import {
   Viewer,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
+  CallbackProperty,
   Color,
   ColorMaterialProperty,
   ConstantProperty,
@@ -20,6 +21,9 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
+  const startAnchorRef = useRef<Entity | null>(null)
+  const drawingLineRef = useRef<Entity | null>(null)
+  const mousePositionRef = useRef<Cartesian3 | null>(null)
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
@@ -129,6 +133,22 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       drawHandlerRef.current.destroy()
       drawHandlerRef.current = null
       setIsLineMode(false)
+      if (drawingLineRef.current) {
+        viewer.entities.remove(drawingLineRef.current)
+        drawingLineRef.current = null
+      }
+      if (startAnchorRef.current) {
+        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        if (anchor.connectedLines.size === 0) {
+          viewer.entities.remove(startAnchorRef.current)
+          anchorsRef.current = anchorsRef.current.filter(
+            (a) => a !== startAnchorRef.current,
+          )
+        }
+        startAnchorRef.current = null
+      }
+      startPositionRef.current = null
+      mousePositionRef.current = null
       return
     }
 
@@ -136,56 +156,114 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     drawHandlerRef.current = handler
     setIsLineMode(true)
 
-    let firstClick = true
-    const getClickPosition = (
-      event: ScreenSpaceEventHandler.PositionedEvent,
+    let isDrawing = false
+    const getPosition = (
+      event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
     ): Cartesian3 | null => {
-      const picked = viewer.scene.pick(event.position)
+      const pos = 'position' in event ? event.position : event.endPosition
+      const picked = viewer.scene.pick(pos)
       if (picked) {
         const entity = picked.id as Entity & { isAnchor?: boolean }
         if (entity.isAnchor) {
           return entity.position?.getValue(viewer.clock.currentTime) || null
         }
       }
-      return (
-        viewer.scene.pickPosition(event.position) ||
-        viewer.camera.pickEllipsoid(event.position)
-      )
+      const ray = viewer.camera.getPickRay(pos)
+      if (ray) {
+        const ground = viewer.scene.globe.pick(ray, viewer.scene)
+        if (ground) {
+          return ground
+        }
+      }
+      return viewer.camera.pickEllipsoid(pos) || null
     }
+
     handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
-      const position = getClickPosition(event)
+      const position = getPosition(event)
       if (!position) {
         return
       }
-      if (firstClick) {
+      if (!isDrawing) {
         startPositionRef.current = position
-        firstClick = false
-      } else {
-        const startAnchor = addAnchor(startPositionRef.current!)!
-        const endAnchor = addAnchor(position)!
-        const line = viewer.entities.add({
+        mousePositionRef.current = position
+        startAnchorRef.current = addAnchor(position)!
+        const dynamicPositions = new CallbackProperty(() => {
+          if (!startPositionRef.current || !mousePositionRef.current) {
+            return []
+          }
+          return [startPositionRef.current, mousePositionRef.current]
+        }, false)
+        drawingLineRef.current = viewer.entities.add({
           polyline: {
-            positions: [startPositionRef.current!, position],
+            positions: dynamicPositions,
             width: new ConstantProperty(2),
             material: new ColorMaterialProperty(Color.YELLOW),
             clampToGround: true,
           },
         })
+        isDrawing = true
+      } else {
+        const endAnchor = addAnchor(position)!
+        const line = drawingLineRef.current!
+        line.polyline!.positions = new ConstantProperty([
+          startPositionRef.current!,
+          position,
+        ])
         ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).isLine = true
         ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).anchors = [
-          startAnchor,
+          startAnchorRef.current!,
           endAnchor,
         ]
-        ;(startAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
+        ;(startAnchorRef.current! as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         startPositionRef.current = position
-        firstClick = false
+        startAnchorRef.current = endAnchor
+        mousePositionRef.current = position
+        const dynamicPositions = new CallbackProperty(() => {
+          if (!startPositionRef.current || !mousePositionRef.current) {
+            return []
+          }
+          return [startPositionRef.current, mousePositionRef.current]
+        }, false)
+        drawingLineRef.current = viewer.entities.add({
+          polyline: {
+            positions: dynamicPositions,
+            width: new ConstantProperty(2),
+            material: new ColorMaterialProperty(Color.YELLOW),
+            clampToGround: true,
+          },
+        })
+        isDrawing = true
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
+
     handler.setInputAction(() => {
+      if (drawingLineRef.current) {
+        viewer.entities.remove(drawingLineRef.current)
+        drawingLineRef.current = null
+      }
+      if (startAnchorRef.current) {
+        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        if (anchor.connectedLines.size === 0) {
+          viewer.entities.remove(startAnchorRef.current)
+          anchorsRef.current = anchorsRef.current.filter((a) => a !== startAnchorRef.current)
+        }
+        startAnchorRef.current = null
+      }
       startPositionRef.current = null
-      firstClick = true
+      mousePositionRef.current = null
+      isDrawing = false
     }, ScreenSpaceEventType.RIGHT_CLICK)
+
+    handler.setInputAction((movement: ScreenSpaceEventHandler.MotionEvent) => {
+      if (!drawingLineRef.current) {
+        return
+      }
+      const position = getPosition(movement)
+      if (position) {
+        mousePositionRef.current = position
+      }
+    }, ScreenSpaceEventType.MOUSE_MOVE)
   }
 
   useEffect(() => {
@@ -258,6 +336,22 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         drawHandlerRef.current.destroy()
         drawHandlerRef.current = null
         setIsLineMode(false)
+        if (drawingLineRef.current) {
+          viewer?.entities.remove(drawingLineRef.current)
+          drawingLineRef.current = null
+        }
+        if (startAnchorRef.current) {
+          const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+          if (anchor.connectedLines.size === 0) {
+            viewer?.entities.remove(startAnchorRef.current)
+            anchorsRef.current = anchorsRef.current.filter(
+              (a) => a !== startAnchorRef.current,
+            )
+          }
+          startAnchorRef.current = null
+        }
+        startPositionRef.current = null
+        mousePositionRef.current = null
       }
       if (event.key === 'Delete' && viewer) {
         if (selectedLineRef.current) {
