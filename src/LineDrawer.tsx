@@ -20,8 +20,6 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
-  const tempLineRef = useRef<Entity | null>(null)
-  const tempAnchorRef = useRef<Entity | null>(null)
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
@@ -130,14 +128,6 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     if (drawHandlerRef.current) {
       drawHandlerRef.current.destroy()
       drawHandlerRef.current = null
-      if (tempLineRef.current) {
-        viewer.entities.remove(tempLineRef.current)
-        tempLineRef.current = null
-      }
-      if (tempAnchorRef.current) {
-        removeAnchor(tempAnchorRef.current)
-        tempAnchorRef.current = null
-      }
       setIsLineMode(false)
       return
     }
@@ -146,6 +136,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     drawHandlerRef.current = handler
     setIsLineMode(true)
 
+    let firstClick = true
     const getClickPosition = (
       event: ScreenSpaceEventHandler.PositionedEvent,
     ): Cartesian3 | null => {
@@ -161,33 +152,25 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         viewer.camera.pickEllipsoid(event.position)
       )
     }
-
     handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
       const position = getClickPosition(event)
       if (!position) {
         return
       }
-
-      if (!tempLineRef.current) {
-        // first right click
+      if (firstClick) {
         startPositionRef.current = position
-        tempAnchorRef.current = addAnchor(position)
-        tempLineRef.current = viewer.entities.add({
+        firstClick = false
+      } else {
+        const startAnchor = addAnchor(startPositionRef.current!)!
+        const endAnchor = addAnchor(position)!
+        const line = viewer.entities.add({
           polyline: {
-            positions: [position, position],
+            positions: [startPositionRef.current!, position],
             width: new ConstantProperty(2),
             material: new ColorMaterialProperty(Color.YELLOW),
             clampToGround: true,
           },
         })
-      } else {
-        const startAnchor = tempAnchorRef.current!
-        const endAnchor = addAnchor(position)!
-        const line = tempLineRef.current
-        line.polyline!.positions = new ConstantProperty([
-          startPositionRef.current!,
-          position,
-        ])
         ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).isLine = true
         ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).anchors = [
           startAnchor,
@@ -195,26 +178,14 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         ]
         ;(startAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
-        tempLineRef.current = null
-        tempAnchorRef.current = null
-        startPositionRef.current = null
+        startPositionRef.current = position
+        firstClick = false
       }
+    }, ScreenSpaceEventType.LEFT_CLICK)
+    handler.setInputAction(() => {
+      startPositionRef.current = null
+      firstClick = true
     }, ScreenSpaceEventType.RIGHT_CLICK)
-
-    handler.setInputAction((movement: ScreenSpaceEventHandler.MotionEvent) => {
-      if (!tempLineRef.current || !startPositionRef.current) {
-        return
-      }
-      const end =
-        viewer.scene.pickPosition(movement.endPosition) ||
-        viewer.camera.pickEllipsoid(movement.endPosition)
-      if (end) {
-        tempLineRef.current.polyline!.positions = new ConstantProperty([
-          startPositionRef.current,
-          end,
-        ])
-      }
-    }, ScreenSpaceEventType.MOUSE_MOVE)
   }
 
   useEffect(() => {
@@ -286,14 +257,6 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       if (event.key === 'Escape' && drawHandlerRef.current) {
         drawHandlerRef.current.destroy()
         drawHandlerRef.current = null
-        if (tempLineRef.current) {
-          viewer?.entities.remove(tempLineRef.current)
-          tempLineRef.current = null
-        }
-        if (tempAnchorRef.current) {
-          removeAnchor(tempAnchorRef.current)
-          tempAnchorRef.current = null
-        }
         setIsLineMode(false)
       }
       if (event.key === 'Delete' && viewer) {
