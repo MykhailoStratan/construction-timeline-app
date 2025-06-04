@@ -165,7 +165,14 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           return entity.position?.getValue(viewer.clock.currentTime) || null
         }
       }
-      return viewer.scene.pickPosition(pos) || viewer.camera.pickEllipsoid(pos)
+      const ray = viewer.camera.getPickRay(pos)
+      if (ray) {
+        const ground = viewer.scene.globe.pick(ray, viewer.scene)
+        if (ground) {
+          return ground
+        }
+      }
+      return viewer.camera.pickEllipsoid(pos) || null
     }
 
     handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
@@ -212,7 +219,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         mousePositionRef.current = null
         isDrawing = false
       }
-    }, ScreenSpaceEventType.LEFT_CLICK)
+    }, ScreenSpaceEventType.RIGHT_CLICK)
 
     handler.setInputAction((movement: ScreenSpaceEventHandler.MotionEvent) => {
       if (!drawingLineRef.current) {
