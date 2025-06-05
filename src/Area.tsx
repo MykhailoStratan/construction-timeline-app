@@ -22,6 +22,8 @@ import {
   Matrix3,
   LabelStyle,
   VerticalOrigin,
+  Cartographic,
+  LabelGraphics,
 } from 'cesium'
 
 interface AreaProps {
@@ -107,7 +109,7 @@ const Area = ({ viewer }: AreaProps) => {
   }, [viewer])
 
 
-  const removeAxisHelper = useCallback(() => {
+  const removeAxisHelper = useCallback(async () => {
     if (!viewer) {
       return
     }
@@ -123,6 +125,29 @@ const Area = ({ viewer }: AreaProps) => {
       )
       ;(axisAreaRef.current as Entity & { positions?: Cartesian3[] }).positions =
         movedPositionsRef.current
+      const result = await computeAreaWithTerrain(movedPositionsRef.current)
+      if (result) {
+        axisAreaRef.current.position = new ConstantPositionProperty(result.centroid)
+        if (axisAreaRef.current.label) {
+          axisAreaRef.current.label.text = new ConstantProperty(
+            `${Math.round(result.area)} m²`,
+          )
+        } else {
+          axisAreaRef.current.label = new LabelGraphics({
+            text: new ConstantProperty(`${Math.round(result.area)} m²`),
+            fillColor: new ConstantProperty(Color.BLACK),
+            style: new ConstantProperty(LabelStyle.FILL),
+            showBackground: new ConstantProperty(true),
+            backgroundColor: new ConstantProperty(
+              Color.WHITE.withAlpha(0.5),
+            ),
+            verticalOrigin: new ConstantProperty(VerticalOrigin.CENTER),
+            heightReference: new ConstantProperty(
+              HeightReference.CLAMP_TO_GROUND,
+            ),
+          })
+        }
+      }
       axisAreaRef.current = null
       movedPositionsRef.current = null
       hierarchyCallbackRef.current = null
@@ -130,7 +155,7 @@ const Area = ({ viewer }: AreaProps) => {
     axisHandlerRef.current?.destroy()
     axisHandlerRef.current = null
     restoreCamera()
-  }, [viewer, restoreCamera])
+  }, [viewer, restoreCamera, computeAreaWithTerrain])
 
   const showAxisHelper = useCallback((area: Entity) => {
     if (!viewer) {
@@ -229,6 +254,13 @@ const Area = ({ viewer }: AreaProps) => {
       )
       ;(area as Entity & { positions?: Cartesian3[] }).positions =
         movedPositionsRef.current
+      const result = computeAreaAndCentroid(movedPositionsRef.current)
+      if (result) {
+        area.position = new ConstantPositionProperty(result.centroid)
+        if (area.label) {
+          area.label.text = new ConstantProperty(`${Math.round(result.area)} m²`)
+        }
+      }
       // Axis helper positions update via CallbackProperty
     }
 
@@ -381,6 +413,59 @@ const Area = ({ viewer }: AreaProps) => {
       new Cartesian3(),
     )
     return { area, centroid }
+  }
+
+  const computeSurfaceAreaAndCentroid = (
+    positions: Cartesian3[],
+  ): { area: number; centroid: Cartesian3 } | null => {
+    if (positions.length < 3) {
+      return null
+    }
+    let area = 0
+    const centroid = new Cartesian3(0, 0, 0)
+    const base = positions[0]
+    for (let i = 1; i < positions.length - 1; i++) {
+      const b = positions[i]
+      const c = positions[i + 1]
+      const ab = Cartesian3.subtract(b, base, new Cartesian3())
+      const ac = Cartesian3.subtract(c, base, new Cartesian3())
+      const cross = Cartesian3.cross(ab, ac, new Cartesian3())
+      const triArea = Cartesian3.magnitude(cross) * 0.5
+      area += triArea
+      const triCentroid = Cartesian3.multiplyByScalar(
+        Cartesian3.add(
+          base,
+          Cartesian3.add(b, c, new Cartesian3()),
+          new Cartesian3(),
+        ),
+        1 / 3,
+        new Cartesian3(),
+      )
+      Cartesian3.multiplyByScalar(triCentroid, triArea, triCentroid)
+      Cartesian3.add(centroid, triCentroid, centroid)
+    }
+    Cartesian3.divideByScalar(centroid, area, centroid)
+    return { area, centroid }
+  }
+
+  async function computeAreaWithTerrain(
+    positions: Cartesian3[],
+  ): Promise<{ area: number; centroid: Cartesian3 } | null> {
+    if (!viewer || positions.length < 3) {
+      return null
+    }
+    const cartographics = positions.map((p) =>
+      Cartographic.fromCartesian(p),
+    )
+    try {
+      const sampled = await viewer.scene.sampleHeightMostDetailed(cartographics)
+      const withHeights = sampled.map((c) =>
+        Cartesian3.fromRadians(c.longitude, c.latitude, c.height),
+      )
+      return computeSurfaceAreaAndCentroid(withHeights)
+    } catch {
+      return computeSurfaceAreaAndCentroid(positions)
+    }
   }
 
   const removeLine = useCallback(
