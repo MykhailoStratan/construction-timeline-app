@@ -63,6 +63,7 @@ const Area = ({ viewer }: AreaProps) => {
     | null
   >(null)
   const anchorsRef = useRef<Entity[]>([])
+  const linesRef = useRef<Entity[]>([])
   const firstAnchorRef = useRef<Entity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
   const [isAreaMode, setIsAreaMode] = useState(false)
@@ -474,6 +475,7 @@ const Area = ({ viewer }: AreaProps) => {
       return
     }
     viewer.entities.remove(line)
+    linesRef.current = linesRef.current.filter((l) => l !== line)
     const lineWithAnchors = line as Entity & { anchors?: [Entity, Entity] }
     if (lineWithAnchors.anchors) {
       for (const anchor of lineWithAnchors.anchors) {
@@ -648,6 +650,7 @@ const Area = ({ viewer }: AreaProps) => {
         ]
         ;(startAnchorRef.current! as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
+        linesRef.current.push(line)
         polygonPositionsRef.current.push(position)
         if (
           endAnchor === firstAnchorRef.current &&
@@ -678,6 +681,10 @@ const Area = ({ viewer }: AreaProps) => {
           })
           ;(areaEntity as Entity & { isArea: boolean; positions: Cartesian3[] }).isArea = true
           ;(areaEntity as Entity & { positions: Cartesian3[] }).positions = polyPositions
+          for (const l of linesRef.current) {
+            removeLine(l)
+          }
+          linesRef.current = []
           firstAnchorRef.current = null
           polygonPositionsRef.current = []
           finishDrawing()
