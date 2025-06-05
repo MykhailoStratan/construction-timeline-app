@@ -45,6 +45,16 @@ const Area = ({ viewer }: AreaProps) => {
     | null
   >(null)
   const axisHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
+  const cameraStateRef = useRef<
+    | {
+        enableRotate: boolean
+        enableTranslate: boolean
+        enableZoom: boolean
+        enableTilt: boolean
+        enableLook: boolean
+      }
+    | null
+  >(null)
   const anchorsRef = useRef<Entity[]>([])
   const firstAnchorRef = useRef<Entity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
@@ -78,6 +88,19 @@ const Area = ({ viewer }: AreaProps) => {
     }
   }
 
+  const restoreCamera = useCallback(() => {
+    if (!viewer || !cameraStateRef.current) {
+      return
+    }
+    const controller = viewer.scene.screenSpaceCameraController
+    controller.enableRotate = cameraStateRef.current.enableRotate
+    controller.enableTranslate = cameraStateRef.current.enableTranslate
+    controller.enableZoom = cameraStateRef.current.enableZoom
+    controller.enableTilt = cameraStateRef.current.enableTilt
+    controller.enableLook = cameraStateRef.current.enableLook
+    cameraStateRef.current = null
+  }, [viewer])
+
 
   const removeAxisHelper = useCallback(() => {
     if (!viewer) {
@@ -91,7 +114,8 @@ const Area = ({ viewer }: AreaProps) => {
     }
     axisHandlerRef.current?.destroy()
     axisHandlerRef.current = null
-  }, [viewer])
+    restoreCamera()
+  }, [viewer, restoreCamera])
 
   const showAxisHelper = useCallback((area: Entity) => {
     if (!viewer) {
@@ -206,6 +230,21 @@ const Area = ({ viewer }: AreaProps) => {
         if (ent.isAxis) {
           dragging = ent.isAxis as 'x' | 'y' | 'z'
           startMouse = getPosition(e)
+          const controller = viewer.scene.screenSpaceCameraController
+          if (!cameraStateRef.current) {
+            cameraStateRef.current = {
+              enableRotate: controller.enableRotate,
+              enableTranslate: controller.enableTranslate,
+              enableZoom: controller.enableZoom,
+              enableTilt: controller.enableTilt,
+              enableLook: controller.enableLook,
+            }
+          }
+          controller.enableRotate = false
+          controller.enableTranslate = false
+          controller.enableZoom = false
+          controller.enableTilt = false
+          controller.enableLook = false
         }
       }
     }, ScreenSpaceEventType.LEFT_DOWN)
@@ -213,6 +252,7 @@ const Area = ({ viewer }: AreaProps) => {
     handler.setInputAction(() => {
       dragging = null
       startMouse = null
+      restoreCamera()
     }, ScreenSpaceEventType.LEFT_UP)
 
     let hovered: Entity | null = null
@@ -245,7 +285,7 @@ const Area = ({ viewer }: AreaProps) => {
           hovered = null
         }
     }, ScreenSpaceEventType.MOUSE_MOVE)
-  }, [viewer, removeAxisHelper])
+  }, [viewer, removeAxisHelper, restoreCamera])
 
   const highlightArea = useCallback(
     (area: Entity) => {
