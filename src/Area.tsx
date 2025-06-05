@@ -8,6 +8,7 @@ import {
   Color,
   ColorMaterialProperty,
   ConstantProperty,
+  ConstantPositionProperty,
   Cartesian3,
   Cartesian2,
   Entity,
@@ -76,6 +77,20 @@ const Area = ({ viewer }: AreaProps) => {
     }
   }
 
+
+  const removeAxisHelper = useCallback(() => {
+    if (!viewer) {
+      return
+    }
+    if (axisHelperRef.current) {
+      viewer.entities.remove(axisHelperRef.current.x)
+      viewer.entities.remove(axisHelperRef.current.y)
+      viewer.entities.remove(axisHelperRef.current.z)
+      axisHelperRef.current = null
+    }
+    axisHandlerRef.current?.destroy()
+    axisHandlerRef.current = null
+  }, [viewer])
 
   const showAxisHelper = useCallback((area: Entity) => {
     if (!viewer) {
@@ -157,7 +172,7 @@ const Area = ({ viewer }: AreaProps) => {
       const pos = area.position?.getValue(viewer.clock.currentTime)
       if (!pos) return
       const newPos = Cartesian3.add(pos, translation, new Cartesian3())
-      area.position = new ConstantProperty(newPos)
+      area.position = new ConstantPositionProperty(newPos)
       const areaWithPositions = area as Entity & { positions?: Cartesian3[] }
       const poly = areaWithPositions.positions
       if (poly) {
@@ -172,9 +187,14 @@ const Area = ({ viewer }: AreaProps) => {
         y: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(yDir, len, new Cartesian3()), new Cartesian3()),
         z: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(zDir, len, new Cartesian3()), new Cartesian3()),
       }
-      axisHelperRef.current?.x.polyline!.positions = [newPos, ends.x]
-      axisHelperRef.current?.y.polyline!.positions = [newPos, ends.y]
-      axisHelperRef.current?.z.polyline!.positions = [newPos, ends.z]
+      if (axisHelperRef.current) {
+        axisHelperRef.current.x.polyline!.positions =
+          new ConstantProperty([newPos, ends.x])
+        axisHelperRef.current.y.polyline!.positions =
+          new ConstantProperty([newPos, ends.y])
+        axisHelperRef.current.z.polyline!.positions =
+          new ConstantProperty([newPos, ends.z])
+      }
     }
 
     handler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
@@ -209,35 +229,21 @@ const Area = ({ viewer }: AreaProps) => {
       const picked = viewer.scene.pick(m.endPosition)
       if (picked) {
         const ent = picked.id as Entity & { isAxis?: string }
-        if (ent.isAxis) {
-          if (hovered && hovered !== ent) {
-            hovered.polyline!.width = 4
+          if (ent.isAxis) {
+            if (hovered && hovered !== ent) {
+              hovered.polyline!.width = new ConstantProperty(4)
+            }
+            hovered = ent
+            hovered.polyline!.width = new ConstantProperty(8)
+            return
           }
-          hovered = ent
-          hovered.polyline!.width = 8
-          return
         }
-      }
-      if (hovered) {
-        hovered.polyline!.width = 4
-        hovered = null
-      }
+        if (hovered) {
+          hovered.polyline!.width = new ConstantProperty(4)
+          hovered = null
+        }
     }, ScreenSpaceEventType.MOUSE_MOVE)
   }, [viewer, removeAxisHelper])
-
-  const removeAxisHelper = useCallback(() => {
-    if (!viewer) {
-      return
-    }
-    if (axisHelperRef.current) {
-      viewer.entities.remove(axisHelperRef.current.x)
-      viewer.entities.remove(axisHelperRef.current.y)
-      viewer.entities.remove(axisHelperRef.current.z)
-      axisHelperRef.current = null
-    }
-    axisHandlerRef.current?.destroy()
-    axisHandlerRef.current = null
-  }, [viewer])
 
   const highlightArea = useCallback(
     (area: Entity) => {
