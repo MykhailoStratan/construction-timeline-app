@@ -9,8 +9,8 @@ import {
   ColorMaterialProperty,
   ConstantProperty,
   Cartesian3,
-  Entity,
 } from 'cesium'
+import type { AnchorEntity, LineEntity } from './entityTypes'
 import { useDrawing } from './hooks/DrawingContext'
 
 interface LineDrawerProps {
@@ -21,8 +21,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
-  const startAnchorRef = useRef<Entity | null>(null)
-  const drawingLineRef = useRef<Entity | null>(null)
+  const startAnchorRef = useRef<AnchorEntity | null>(null)
+  const drawingLineRef = useRef<LineEntity | null>(null)
   const mousePositionRef = useRef<Cartesian3 | null>(null)
   const [isLineMode, setIsLineMode] = useState(false)
 
@@ -55,7 +55,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         drawingLineRef.current = null
       }
       if (startAnchorRef.current) {
-        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        const anchor = startAnchorRef.current
         if (anchor.connectedLines.size === 0) {
           viewer.entities.remove(startAnchorRef.current)
           anchorsRef.current = anchorsRef.current.filter(
@@ -82,8 +82,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       const pos = 'position' in event ? event.position : event.endPosition
       const picked = viewer.scene.pick(pos)
       if (picked) {
-        const entity = picked.id as Entity & { isAnchor?: boolean }
-        if (entity.isAnchor) {
+        const entity = picked.id as AnchorEntity | undefined
+        if (entity?.isAnchor) {
           return entity.position?.getValue(viewer.clock.currentTime) || null
         }
       }
@@ -123,7 +123,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
             material: new ColorMaterialProperty(Color.YELLOW),
             clampToGround: true,
           },
-        })
+        }) as LineEntity
         isDrawing = true
       } else {
         const endAnchor = addAnchor(position)!
@@ -132,13 +132,10 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           startPositionRef.current!,
           position,
         ])
-        ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).isLine = true
-        ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).anchors = [
-          startAnchorRef.current!,
-          endAnchor,
-        ]
-        ;(startAnchorRef.current! as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
-        ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
+        line.isLine = true
+        line.anchors = [startAnchorRef.current!, endAnchor]
+        startAnchorRef.current!.connectedLines.add(line)
+        endAnchor.connectedLines.add(line)
         startPositionRef.current = position
         startAnchorRef.current = endAnchor
         mousePositionRef.current = position
@@ -155,7 +152,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
             material: new ColorMaterialProperty(Color.YELLOW),
             clampToGround: true,
           },
-        })
+        }) as LineEntity
         isDrawing = true
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
@@ -186,7 +183,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         drawingLineRef.current = null
       }
       if (startAnchorRef.current) {
-        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        const anchor = startAnchorRef.current
         if (anchor.connectedLines.size === 0) {
           viewer.entities.remove(startAnchorRef.current)
           anchorsRef.current = anchorsRef.current.filter((a) => a !== startAnchorRef.current)
@@ -226,11 +223,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         }
         const picked = viewer.scene.pick(event.position)
         if (picked) {
-          const entity = picked.id as Entity & {
-            isLine?: boolean
-            isAnchor?: boolean
-          }
-          if (entity.isLine) {
+          const entity = picked.id as LineEntity | AnchorEntity | undefined
+          if (entity && 'isLine' in entity && entity.isLine) {
             if (selectedLineRef.current && selectedLineRef.current !== entity) {
               unhighlightLine(selectedLineRef.current)
             }
@@ -241,8 +235,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
             selectedLineRef.current = entity
             highlightLine(entity)
             return
-          }
-          if (entity.isAnchor) {
+          } else if (entity && 'isAnchor' in entity && entity.isAnchor) {
             if (
               selectedAnchorRef.current &&
               selectedAnchorRef.current !== entity
@@ -295,7 +288,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           drawingLineRef.current = null
         }
         if (startAnchorRef.current) {
-          const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+          const anchor = startAnchorRef.current
           if (anchor.connectedLines.size === 0) {
             viewer?.entities.remove(startAnchorRef.current)
             anchorsRef.current = anchorsRef.current.filter(

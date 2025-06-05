@@ -1,40 +1,40 @@
 import { useCallback, useRef } from 'react'
 import {
   Viewer,
-  Entity,
   Cartesian3,
   Color,
   ColorMaterialProperty,
   ConstantProperty,
   HeightReference,
 } from 'cesium'
+import type { AnchorEntity, LineEntity } from '../entityTypes'
 
 export function useDrawingEntities(viewer: Viewer | null) {
-  const anchorsRef = useRef<Entity[]>([])
-  const linesRef = useRef<Entity[]>([])
+  const anchorsRef = useRef<AnchorEntity[]>([])
+  const linesRef = useRef<LineEntity[]>([])
 
-  const highlightLine = useCallback((line: Entity) => {
+  const highlightLine = useCallback((line: LineEntity) => {
     if (line.polyline) {
       line.polyline.material = new ColorMaterialProperty(Color.RED)
       line.polyline.width = new ConstantProperty(3)
     }
   }, [])
 
-  const unhighlightLine = useCallback((line: Entity) => {
+  const unhighlightLine = useCallback((line: LineEntity) => {
     if (line.polyline) {
       line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
       line.polyline.width = new ConstantProperty(2)
     }
   }, [])
 
-  const highlightAnchor = useCallback((anchor: Entity) => {
+  const highlightAnchor = useCallback((anchor: AnchorEntity) => {
     if (anchor.point) {
       anchor.point.color = new ConstantProperty(Color.RED)
       anchor.point.pixelSize = new ConstantProperty(10)
     }
   }, [])
 
-  const unhighlightAnchor = useCallback((anchor: Entity) => {
+  const unhighlightAnchor = useCallback((anchor: AnchorEntity) => {
     if (anchor.point) {
       anchor.point.color = new ConstantProperty(Color.ORANGE)
       anchor.point.pixelSize = new ConstantProperty(8)
@@ -42,7 +42,7 @@ export function useDrawingEntities(viewer: Viewer | null) {
   }, [])
 
   const addAnchor = useCallback(
-    (position: Cartesian3) => {
+    (position: Cartesian3): AnchorEntity | null => {
       if (!viewer) {
         return null
       }
@@ -52,7 +52,7 @@ export function useDrawingEntities(viewer: Viewer | null) {
           return existing
         }
       }
-      const anchor: Entity = viewer.entities.add({
+      const anchor = viewer.entities.add({
         position,
         point: {
           pixelSize: 8,
@@ -61,9 +61,9 @@ export function useDrawingEntities(viewer: Viewer | null) {
           outlineWidth: 1,
           heightReference: HeightReference.CLAMP_TO_GROUND,
         },
-      })
-      ;(anchor as Entity & { isAnchor: boolean; connectedLines: Set<Entity> }).isAnchor = true
-      ;(anchor as Entity & { isAnchor: boolean; connectedLines: Set<Entity> }).connectedLines = new Set()
+      }) as AnchorEntity
+      anchor.isAnchor = true
+      anchor.connectedLines = new Set()
       anchorsRef.current.push(anchor)
       return anchor
     },
@@ -71,18 +71,16 @@ export function useDrawingEntities(viewer: Viewer | null) {
   )
 
   const removeLine = useCallback(
-    (line: Entity) => {
+    (line: LineEntity) => {
       if (!viewer) return
       viewer.entities.remove(line)
       linesRef.current = linesRef.current.filter((l) => l !== line)
-      const lineWithAnchors = line as Entity & { anchors?: [Entity, Entity] }
-      if (lineWithAnchors.anchors) {
-        for (const anchor of lineWithAnchors.anchors) {
-          const a = anchor as Entity & { connectedLines?: Set<Entity> }
-          a.connectedLines?.delete(line)
-          if (!a.connectedLines || a.connectedLines.size === 0) {
-            viewer.entities.remove(a)
-            anchorsRef.current = anchorsRef.current.filter((e) => e !== a)
+      if (line.anchors) {
+        for (const anchor of line.anchors) {
+          anchor.connectedLines.delete(line)
+          if (anchor.connectedLines.size === 0) {
+            viewer.entities.remove(anchor)
+            anchorsRef.current = anchorsRef.current.filter((e) => e !== anchor)
           }
         }
       }
@@ -91,13 +89,12 @@ export function useDrawingEntities(viewer: Viewer | null) {
   )
 
   const removeAnchor = useCallback(
-    (anchor: Entity) => {
+    (anchor: AnchorEntity) => {
       if (!viewer) return
       viewer.entities.remove(anchor)
       anchorsRef.current = anchorsRef.current.filter((e) => e !== anchor)
-      const anchorWithLines = anchor as Entity & { connectedLines?: Set<Entity> }
-      if (anchorWithLines.connectedLines) {
-        for (const line of Array.from(anchorWithLines.connectedLines)) {
+      if (anchor.connectedLines) {
+        for (const line of Array.from(anchor.connectedLines)) {
           removeLine(line)
         }
       }
