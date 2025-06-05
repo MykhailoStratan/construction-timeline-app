@@ -13,6 +13,9 @@ import {
   Entity,
   HeightReference,
   EllipsoidTangentPlane,
+  Transforms,
+  Matrix4,
+  Matrix3,
   LabelStyle,
   VerticalOrigin,
 } from 'cesium'
@@ -31,6 +34,15 @@ const Area = ({ viewer }: AreaProps) => {
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
   const selectedAreaRef = useRef<Entity | null>(null)
+  const axisHelperRef = useRef<
+    | {
+        x: Entity
+        y: Entity
+        z: Entity
+      }
+    | null
+  >(null)
+  const axisHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const anchorsRef = useRef<Entity[]>([])
   const firstAnchorRef = useRef<Entity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
@@ -64,23 +76,194 @@ const Area = ({ viewer }: AreaProps) => {
     }
   }
 
-  const highlightArea = (area: Entity) => {
-    if (area.polygon) {
-      area.polygon.material = new ColorMaterialProperty(
-        Color.RED.withAlpha(0.5),
-      )
-      area.polygon.outlineColor = new ConstantProperty(Color.RED)
-    }
-  }
 
-  const unhighlightArea = (area: Entity) => {
-    if (area.polygon) {
-      area.polygon.material = new ColorMaterialProperty(
-        Color.YELLOW.withAlpha(0.5),
-      )
-      area.polygon.outlineColor = new ConstantProperty(Color.YELLOW)
+  const showAxisHelper = useCallback((area: Entity) => {
+    if (!viewer) {
+      return
     }
-  }
+    removeAxisHelper()
+    const center = area.position?.getValue(viewer.clock.currentTime)
+    if (!center) {
+      return
+    }
+    const transform = Transforms.eastNorthUpToFixedFrame(center)
+    const rot = Matrix4.getMatrix3(transform, new Matrix3())
+    const xDir = Matrix3.getColumn(rot, 0, new Cartesian3())
+    const yDir = Matrix3.getColumn(rot, 1, new Cartesian3())
+    const zDir = Matrix3.getColumn(rot, 2, new Cartesian3())
+    const len = 20
+    const xEnd = Cartesian3.add(
+      center,
+      Cartesian3.multiplyByScalar(xDir, len, new Cartesian3()),
+      new Cartesian3(),
+    )
+    const yEnd = Cartesian3.add(
+      center,
+      Cartesian3.multiplyByScalar(yDir, len, new Cartesian3()),
+      new Cartesian3(),
+    )
+    const zEnd = Cartesian3.add(
+      center,
+      Cartesian3.multiplyByScalar(zDir, len, new Cartesian3()),
+      new Cartesian3(),
+    )
+    const x = viewer.entities.add({
+      polyline: {
+        positions: [center, xEnd],
+        material: Color.RED,
+        width: 4,
+      },
+    })
+    const y = viewer.entities.add({
+      polyline: {
+        positions: [center, yEnd],
+        material: Color.GREEN,
+        width: 4,
+      },
+    })
+    const z = viewer.entities.add({
+      polyline: {
+        positions: [center, zEnd],
+        material: Color.BLUE,
+        width: 4,
+      },
+    })
+    ;(x as Entity & { isAxis: 'x' }).isAxis = 'x'
+    ;(y as Entity & { isAxis: 'y' }).isAxis = 'y'
+    ;(z as Entity & { isAxis: 'z' }).isAxis = 'z'
+    axisHelperRef.current = { x, y, z }
+
+    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+    axisHandlerRef.current = handler
+    let dragging: 'x' | 'y' | 'z' | null = null
+    let startMouse: Cartesian3 | null = null
+
+    const getPosition = (
+      event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
+    ): Cartesian3 | null => {
+      const pos = 'position' in event ? event.position : event.endPosition
+      const ray = viewer.camera.getPickRay(pos)
+      if (ray) {
+        const ground = viewer.scene.globe.pick(ray, viewer.scene)
+        if (ground) {
+          return ground
+        }
+      }
+      return viewer.camera.pickEllipsoid(pos) || null
+    }
+
+    const axisDirs = { x: xDir, y: yDir, z: zDir }
+    const update = (translation: Cartesian3) => {
+      const pos = area.position?.getValue(viewer.clock.currentTime)
+      if (!pos) return
+      const newPos = Cartesian3.add(pos, translation, new Cartesian3())
+      area.position = new ConstantProperty(newPos)
+      const areaWithPositions = area as Entity & { positions?: Cartesian3[] }
+      const poly = areaWithPositions.positions
+      if (poly) {
+        const moved = poly.map((p) =>
+          Cartesian3.add(p, translation, new Cartesian3()),
+        )
+        area.polygon!.hierarchy = new ConstantProperty(moved)
+        areaWithPositions.positions = moved
+      }
+      const ends = {
+        x: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(xDir, len, new Cartesian3()), new Cartesian3()),
+        y: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(yDir, len, new Cartesian3()), new Cartesian3()),
+        z: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(zDir, len, new Cartesian3()), new Cartesian3()),
+      }
+      axisHelperRef.current?.x.polyline!.positions = [newPos, ends.x]
+      axisHelperRef.current?.y.polyline!.positions = [newPos, ends.y]
+      axisHelperRef.current?.z.polyline!.positions = [newPos, ends.z]
+    }
+
+    handler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
+      const picked = viewer.scene.pick(e.position)
+      if (picked) {
+        const ent = picked.id as Entity & { isAxis?: string }
+        if (ent.isAxis) {
+          dragging = ent.isAxis as 'x' | 'y' | 'z'
+          startMouse = getPosition(e)
+        }
+      }
+    }, ScreenSpaceEventType.LEFT_DOWN)
+
+    handler.setInputAction(() => {
+      dragging = null
+      startMouse = null
+    }, ScreenSpaceEventType.LEFT_UP)
+
+    let hovered: Entity | null = null
+
+    handler.setInputAction((m: ScreenSpaceEventHandler.MotionEvent) => {
+      if (dragging && startMouse) {
+        const pos = getPosition(m)
+        if (!pos) return
+        const diff = Cartesian3.subtract(pos, startMouse, new Cartesian3())
+        const dir = axisDirs[dragging]
+        const amount = Cartesian3.dot(diff, dir)
+        const translation = Cartesian3.multiplyByScalar(dir, amount, new Cartesian3())
+        update(translation)
+        return
+      }
+      const picked = viewer.scene.pick(m.endPosition)
+      if (picked) {
+        const ent = picked.id as Entity & { isAxis?: string }
+        if (ent.isAxis) {
+          if (hovered && hovered !== ent) {
+            hovered.polyline!.width = 4
+          }
+          hovered = ent
+          hovered.polyline!.width = 8
+          return
+        }
+      }
+      if (hovered) {
+        hovered.polyline!.width = 4
+        hovered = null
+      }
+    }, ScreenSpaceEventType.MOUSE_MOVE)
+  }, [viewer, removeAxisHelper])
+
+  const removeAxisHelper = useCallback(() => {
+    if (!viewer) {
+      return
+    }
+    if (axisHelperRef.current) {
+      viewer.entities.remove(axisHelperRef.current.x)
+      viewer.entities.remove(axisHelperRef.current.y)
+      viewer.entities.remove(axisHelperRef.current.z)
+      axisHelperRef.current = null
+    }
+    axisHandlerRef.current?.destroy()
+    axisHandlerRef.current = null
+  }, [viewer])
+
+  const highlightArea = useCallback(
+    (area: Entity) => {
+      if (area.polygon) {
+        area.polygon.material = new ColorMaterialProperty(
+          Color.RED.withAlpha(0.5),
+        )
+        area.polygon.outlineColor = new ConstantProperty(Color.RED)
+      }
+      showAxisHelper(area)
+    },
+    [showAxisHelper],
+  )
+
+  const unhighlightArea = useCallback(
+    (area: Entity) => {
+      if (area.polygon) {
+        area.polygon.material = new ColorMaterialProperty(
+          Color.YELLOW.withAlpha(0.5),
+        )
+        area.polygon.outlineColor = new ConstantProperty(Color.YELLOW)
+      }
+      removeAxisHelper()
+    },
+    [removeAxisHelper],
+  )
 
   const computeAreaAndCentroid = (
     positions: Cartesian3[],
@@ -169,8 +352,11 @@ const Area = ({ viewer }: AreaProps) => {
         return
       }
       viewer.entities.remove(area)
+      if (selectedAreaRef.current === area) {
+        removeAxisHelper()
+      }
     },
-    [viewer],
+    [viewer, removeAxisHelper],
   )
 
   const addAnchor = (position: Cartesian3) => {
@@ -327,7 +513,8 @@ const Area = ({ viewer }: AreaProps) => {
                 }
               : undefined,
           })
-          ;(areaEntity as Entity & { isArea: boolean }).isArea = true
+          ;(areaEntity as Entity & { isArea: boolean; positions: Cartesian3[] }).isArea = true
+          ;(areaEntity as Entity & { positions: Cartesian3[] }).positions = polyPositions
           firstAnchorRef.current = null
           polygonPositionsRef.current = []
           finishDrawing()
@@ -502,7 +689,7 @@ const Area = ({ viewer }: AreaProps) => {
       selectionHandlerRef.current?.destroy()
       selectionHandlerRef.current = null
     }
-  }, [viewer])
+  }, [viewer, highlightArea, unhighlightArea])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -544,7 +731,15 @@ const Area = ({ viewer }: AreaProps) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isAreaMode, removeLine, removeAnchor, removeArea, viewer])
+  }, [
+    isAreaMode,
+    removeLine,
+    removeAnchor,
+    removeArea,
+    viewer,
+    highlightArea,
+    unhighlightArea,
+  ])
 
   return (
     <button
