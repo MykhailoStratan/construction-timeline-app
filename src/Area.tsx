@@ -9,8 +9,13 @@ import {
   ColorMaterialProperty,
   ConstantProperty,
   Cartesian3,
+  Cartesian2,
   Entity,
   HeightReference,
+  EllipsoidTangentPlane,
+  PolygonPipeline,
+  LabelStyle,
+  VerticalOrigin,
 } from 'cesium'
 
 interface AreaProps {
@@ -76,6 +81,47 @@ const Area = ({ viewer }: AreaProps) => {
       )
       area.polygon.outlineColor = new ConstantProperty(Color.YELLOW)
     }
+  }
+
+  const computeAreaAndCentroid = (
+    positions: Cartesian3[],
+  ): { area: number; centroid: Cartesian3 } | null => {
+    if (!viewer || positions.length < 3) {
+      return null
+    }
+    const plane = EllipsoidTangentPlane.fromPoints(
+      positions,
+      viewer.scene.globe.ellipsoid,
+    )
+    const projected = plane.projectPointsOntoPlane(positions, [])
+    if (projected.length < 3) {
+      return null
+    }
+    const area2D = PolygonPipeline.computeArea2D(projected)
+    let cx = 0
+    let cy = 0
+    let factor = 0
+    for (let i = 0, j = projected.length - 1; i < projected.length; j = i++) {
+      const p0 = projected[j]
+      const p1 = projected[i]
+      const f = p0.x * p1.y - p1.x * p0.y
+      factor += f
+      cx += (p0.x + p1.x) * f
+      cy += (p0.y + p1.y) * f
+    }
+    const area = Math.abs(area2D)
+    const signedArea = factor * 0.5
+    if (signedArea === 0) {
+      return null
+    }
+    cx /= 6 * signedArea
+    cy /= 6 * signedArea
+    const centroid2D = new Cartesian2(cx, cy)
+    const centroid = plane.projectPointOntoEllipsoid(
+      centroid2D,
+      new Cartesian3(),
+    )
+    return { area, centroid }
   }
 
   const removeLine = useCallback(
@@ -256,9 +302,14 @@ const Area = ({ viewer }: AreaProps) => {
         ;(startAnchorRef.current! as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         polygonPositionsRef.current.push(position)
-        if (endAnchor === firstAnchorRef.current && polygonPositionsRef.current.length >= 3) {
+        if (
+          endAnchor === firstAnchorRef.current &&
+          polygonPositionsRef.current.length >= 3
+        ) {
           const polyPositions = [...polygonPositionsRef.current]
-          const area = viewer.entities.add({
+          const result = computeAreaAndCentroid(polyPositions)
+          const areaEntity = viewer.entities.add({
+            position: result?.centroid,
             polygon: {
               hierarchy: polyPositions,
               material: new ColorMaterialProperty(Color.YELLOW.withAlpha(0.5)),
@@ -266,8 +317,19 @@ const Area = ({ viewer }: AreaProps) => {
               outlineColor: Color.YELLOW,
               heightReference: HeightReference.CLAMP_TO_GROUND,
             },
+            label: result
+              ? {
+                  text: `${Math.round(result.area)} m²`,
+                  fillColor: Color.BLACK,
+                  style: LabelStyle.FILL,
+                  showBackground: true,
+                  backgroundColor: Color.WHITE.withAlpha(0.5),
+                  verticalOrigin: VerticalOrigin.CENTER,
+                  heightReference: HeightReference.CLAMP_TO_GROUND,
+                }
+              : undefined,
           })
-          ;(area as Entity & { isArea: boolean }).isArea = true
+          ;(areaEntity as Entity & { isArea: boolean }).isArea = true
           firstAnchorRef.current = null
           polygonPositionsRef.current = []
           finishDrawing()
