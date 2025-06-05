@@ -23,7 +23,7 @@ import {
   LabelGraphics,
 } from 'cesium'
 import { computeAreaAndCentroid, computeAreaWithTerrain } from './geometry'
-import { useDrawingEntities } from './hooks/useDrawingEntities'
+import { useDrawing } from './hooks/DrawingContext'
 
 interface AreaProps {
   viewer: Viewer | null
@@ -36,9 +36,6 @@ const Area = ({ viewer }: AreaProps) => {
   const startAnchorRef = useRef<Entity | null>(null)
   const drawingLineRef = useRef<Entity | null>(null)
   const mousePositionRef = useRef<Cartesian3 | null>(null)
-  const selectedLineRef = useRef<Entity | null>(null)
-  const selectedAnchorRef = useRef<Entity | null>(null)
-  const selectedAreaRef = useRef<Entity | null>(null)
   const axisHelperRef = useRef<
     | {
         x: Entity
@@ -71,7 +68,10 @@ const Area = ({ viewer }: AreaProps) => {
     addAnchor,
     removeLine,
     removeAnchor,
-  } = useDrawingEntities(viewer)
+    selectedLineRef,
+    selectedAnchorRef,
+    selectedAreaRef,
+  } = useDrawing()
   const firstAnchorRef = useRef<Entity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
   const [isAreaMode, setIsAreaMode] = useState(false)
@@ -138,7 +138,7 @@ const Area = ({ viewer }: AreaProps) => {
     axisHandlerRef.current?.destroy()
     axisHandlerRef.current = null
     restoreCamera()
-  }, [viewer, restoreCamera, computeAreaWithTerrain])
+  }, [viewer, restoreCamera])
 
   const showAxisHelper = useCallback((area: Entity) => {
     if (!viewer) {
@@ -369,7 +369,7 @@ const Area = ({ viewer }: AreaProps) => {
         removeAxisHelper()
       }
     },
-    [viewer, removeAxisHelper],
+    [viewer, removeAxisHelper, selectedAreaRef],
   )
 
 
@@ -683,7 +683,18 @@ const Area = ({ viewer }: AreaProps) => {
       selectionHandlerRef.current?.destroy()
       selectionHandlerRef.current = null
     }
-  }, [viewer, highlightArea, unhighlightArea])
+  }, [
+    viewer,
+    highlightArea,
+    unhighlightArea,
+    highlightLine,
+    unhighlightLine,
+    highlightAnchor,
+    unhighlightAnchor,
+    selectedLineRef,
+    selectedAnchorRef,
+    selectedAreaRef,
+  ])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -733,6 +744,10 @@ const Area = ({ viewer }: AreaProps) => {
     viewer,
     highlightArea,
     unhighlightArea,
+    anchorsRef,
+    selectedLineRef,
+    selectedAnchorRef,
+    selectedAreaRef,
   ])
 
   return (
