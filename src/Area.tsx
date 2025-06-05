@@ -12,6 +12,7 @@ import {
   Cartesian3,
   Cartesian2,
   Entity,
+  Property,
   HeightReference,
   EllipsoidTangentPlane,
   PolygonHierarchy,
@@ -21,6 +22,7 @@ import {
   LabelGraphics,
 } from 'cesium'
 import AxisHelper from './AxisHelper'
+import type { AxisHelperProps } from './AxisHelper'
 
 interface AreaProps {
   viewer: Viewer | null
@@ -36,7 +38,7 @@ const Area = ({ viewer }: AreaProps) => {
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
   const selectedAreaRef = useRef<Entity | null>(null)
-  const axisHelperRef = useRef<AxisHelper | null>(null)
+  const [axisProps, setAxisProps] = useState<AxisHelperProps | null>(null)
   const axisAreaRef = useRef<Entity | null>(null)
   const movedPositionsRef = useRef<Cartesian3[] | null>(null)
   const hierarchyCallbackRef = useRef<CallbackProperty | null>(null)
@@ -45,16 +47,6 @@ const Area = ({ viewer }: AreaProps) => {
   const firstAnchorRef = useRef<Entity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
   const [isAreaMode, setIsAreaMode] = useState(false)
-
-  useEffect(() => {
-    if (viewer) {
-      axisHelperRef.current = new AxisHelper(viewer)
-    }
-    return () => {
-      axisHelperRef.current?.remove()
-      axisHelperRef.current = null
-    }
-  }, [viewer])
 
   const highlightLine = (line: Entity) => {
     if (line.polyline) {
@@ -92,7 +84,7 @@ const Area = ({ viewer }: AreaProps) => {
     if (!viewer) {
       return
     }
-    axisHelperRef.current?.remove()
+    setAxisProps(null)
     if (axisAreaRef.current && movedPositionsRef.current) {
       const area = axisAreaRef.current
       const positions = movedPositionsRef.current
@@ -132,7 +124,7 @@ const Area = ({ viewer }: AreaProps) => {
 
   const showLineAxis = useCallback(
     (line: Entity) => {
-      if (!viewer || !axisHelperRef.current) {
+      if (!viewer) {
         return
       }
       removeAxisHelper()
@@ -157,7 +149,8 @@ const Area = ({ viewer }: AreaProps) => {
         }
       }
 
-      axisHelperRef.current.show({
+      setAxisProps({
+        viewer,
         enableZ: false,
         getPosition: () => {
           const time = viewer.clock.currentTime
@@ -179,7 +172,7 @@ const Area = ({ viewer }: AreaProps) => {
 
   const showAxisHelper = useCallback(
     (area: Entity) => {
-      if (!viewer || !axisHelperRef.current) {
+      if (!viewer) {
         return
       }
       removeAxisHelper()
@@ -211,7 +204,8 @@ const Area = ({ viewer }: AreaProps) => {
         }
       }
 
-      axisHelperRef.current.show({
+      setAxisProps({
+        viewer,
         enableZ: false,
         getPosition: () =>
           area.position?.getValue(viewer.clock.currentTime) || null,
@@ -247,9 +241,9 @@ const Area = ({ viewer }: AreaProps) => {
     [removeAxisHelper],
   )
 
-  const computeAreaAndCentroid = (
+  function computeAreaAndCentroid(
     positions: Cartesian3[],
-  ): { area: number; centroid: Cartesian3 } | null => {
+  ): { area: number; centroid: Cartesian3 } | null {
     if (!viewer || positions.length < 3) {
       return null
     }
@@ -783,12 +777,15 @@ const Area = ({ viewer }: AreaProps) => {
   ])
 
   return (
-    <button
-      onClick={startAreaMode}
-      style={{ border: isAreaMode ? '2px solid yellow' : '1px solid gray' }}
-    >
-      Area
-    </button>
+    <>
+      {axisProps && <AxisHelper {...axisProps} />}
+      <button
+        onClick={startAreaMode}
+        style={{ border: isAreaMode ? '2px solid yellow' : '1px solid gray' }}
+      >
+        Area
+      </button>
+    </>
   )
 }
 

@@ -15,6 +15,7 @@ import {
   HeightReference,
 } from 'cesium'
 import AxisHelper from './AxisHelper'
+import type { AxisHelperProps } from './AxisHelper'
 
 interface LineDrawerProps {
   viewer: Viewer | null
@@ -29,26 +30,16 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const mousePositionRef = useRef<Cartesian3 | null>(null)
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
-  const axisHelperRef = useRef<AxisHelper | null>(null)
+  const [axisProps, setAxisProps] = useState<AxisHelperProps | null>(null)
   const anchorsRef = useRef<Entity[]>([])
   const [isLineMode, setIsLineMode] = useState(false)
 
-  useEffect(() => {
-    if (viewer) {
-      axisHelperRef.current = new AxisHelper(viewer)
-    }
-    return () => {
-      axisHelperRef.current?.remove()
-      axisHelperRef.current = null
-    }
-  }, [viewer])
-
   const showLineAxis = useCallback(
     (line: Entity) => {
-      if (!viewer || !axisHelperRef.current) {
+      if (!viewer) {
         return
       }
-      axisHelperRef.current.remove()
+      setAxisProps(null)
       const update = (translation: Cartesian3) => {
         const time = viewer.clock.currentTime
         const positions =
@@ -70,7 +61,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         }
       }
 
-      axisHelperRef.current.show({
+      setAxisProps({
+        viewer,
         enableZ: false,
         getPosition: () => {
           const time = viewer.clock.currentTime
@@ -103,7 +95,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
       line.polyline.width = new ConstantProperty(2)
     }
-    axisHelperRef.current?.remove()
+    setAxisProps(null)
   }
 
   const highlightAnchor = (anchor: Entity) => {
@@ -462,12 +454,15 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   }, [isLineMode, removeLine, removeAnchor, viewer])
 
   return (
-    <button
-      onClick={startLineMode}
-      style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
-    >
-      Line
-    </button>
+    <>
+      {axisProps && <AxisHelper {...axisProps} />}
+      <button
+        onClick={startLineMode}
+        style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
+      >
+        Line
+      </button>
+    </>
   )
 }
 
