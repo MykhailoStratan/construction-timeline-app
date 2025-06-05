@@ -22,6 +22,7 @@ import {
   VerticalOrigin,
   LabelGraphics,
 } from 'cesium'
+import type { AnchorEntity, LineEntity, AreaEntity } from './entityTypes'
 import { computeAreaAndCentroid, computeAreaWithTerrain } from './geometry'
 import { useDrawing } from './hooks/DrawingContext'
 
@@ -33,8 +34,8 @@ const Area = ({ viewer }: AreaProps) => {
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
-  const startAnchorRef = useRef<Entity | null>(null)
-  const drawingLineRef = useRef<Entity | null>(null)
+  const startAnchorRef = useRef<AnchorEntity | null>(null)
+  const drawingLineRef = useRef<LineEntity | null>(null)
   const mousePositionRef = useRef<Cartesian3 | null>(null)
   const axisHelperRef = useRef<
     | {
@@ -44,7 +45,7 @@ const Area = ({ viewer }: AreaProps) => {
       }
     | null
   >(null)
-  const axisAreaRef = useRef<Entity | null>(null)
+  const axisAreaRef = useRef<AreaEntity | null>(null)
   const movedPositionsRef = useRef<Cartesian3[] | null>(null)
   const hierarchyCallbackRef = useRef<CallbackProperty | null>(null)
   const axisHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
@@ -72,7 +73,7 @@ const Area = ({ viewer }: AreaProps) => {
     selectedAnchorRef,
     selectedAreaRef,
   } = useDrawing()
-  const firstAnchorRef = useRef<Entity | null>(null)
+  const firstAnchorRef = useRef<AnchorEntity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
   const [isAreaMode, setIsAreaMode] = useState(false)
 
@@ -110,7 +111,7 @@ const Area = ({ viewer }: AreaProps) => {
       area.polygon!.hierarchy = new ConstantProperty(
         new PolygonHierarchy(positions),
       )
-      ;(area as Entity & { positions?: Cartesian3[] }).positions = positions
+      area.positions = positions
       const result = await computeAreaWithTerrain(viewer, positions)
       if (result) {
         area.position = new ConstantPositionProperty(result.centroid)
@@ -140,7 +141,7 @@ const Area = ({ viewer }: AreaProps) => {
     restoreCamera()
   }, [viewer, restoreCamera])
 
-  const showAxisHelper = useCallback((area: Entity) => {
+  const showAxisHelper = useCallback((area: AreaEntity) => {
     if (!viewer) {
       return
     }
@@ -218,9 +219,9 @@ const Area = ({ viewer }: AreaProps) => {
     }
 
     const axisDirs = { x: xDir, y: yDir, z: zDir }
-    movedPositionsRef.current = (
-      (area as Entity & { positions?: Cartesian3[] }).positions || []
-    ).map((p) => Cartesian3.clone(p))
+    movedPositionsRef.current = (area.positions || []).map((p) =>
+      Cartesian3.clone(p),
+    )
     hierarchyCallbackRef.current = new CallbackProperty(() => {
       return new PolygonHierarchy(movedPositionsRef.current || [])
     }, false)
@@ -235,8 +236,7 @@ const Area = ({ viewer }: AreaProps) => {
       movedPositionsRef.current = movedPositionsRef.current.map((p) =>
         Cartesian3.add(p, translation, new Cartesian3()),
       )
-      ;(area as Entity & { positions?: Cartesian3[] }).positions =
-        movedPositionsRef.current
+      area.positions = movedPositionsRef.current
       const result = computeAreaAndCentroid(viewer, movedPositionsRef.current)
       if (result) {
         area.position = new ConstantPositionProperty(result.centroid)
@@ -333,7 +333,7 @@ const Area = ({ viewer }: AreaProps) => {
   }, [viewer, removeAxisHelper, restoreCamera])
 
   const highlightArea = useCallback(
-    (area: Entity) => {
+    (area: AreaEntity) => {
       if (area.polygon) {
         area.polygon.material = new ColorMaterialProperty(
           Color.RED.withAlpha(0.5),
@@ -346,7 +346,7 @@ const Area = ({ viewer }: AreaProps) => {
   )
 
   const unhighlightArea = useCallback(
-    (area: Entity) => {
+    (area: AreaEntity) => {
       if (area.polygon) {
         area.polygon.material = new ColorMaterialProperty(
           Color.YELLOW.withAlpha(0.5),
@@ -360,7 +360,7 @@ const Area = ({ viewer }: AreaProps) => {
 
 
   const removeArea = useCallback(
-    (area: Entity) => {
+    (area: AreaEntity) => {
       if (!viewer) {
         return
       }
@@ -388,7 +388,7 @@ const Area = ({ viewer }: AreaProps) => {
         drawingLineRef.current = null
       }
       if (startAnchorRef.current) {
-        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        const anchor = startAnchorRef.current
         if (anchor.connectedLines.size === 0) {
           viewer.entities.remove(startAnchorRef.current)
           anchorsRef.current = anchorsRef.current.filter(
@@ -415,8 +415,8 @@ const Area = ({ viewer }: AreaProps) => {
       const pos = 'position' in event ? event.position : event.endPosition
       const picked = viewer.scene.pick(pos)
       if (picked) {
-        const entity = picked.id as Entity & { isAnchor?: boolean }
-        if (entity.isAnchor) {
+        const entity = picked.id as AnchorEntity | undefined
+        if (entity?.isAnchor) {
           return entity.position?.getValue(viewer.clock.currentTime) || null
         }
       }
@@ -458,7 +458,7 @@ const Area = ({ viewer }: AreaProps) => {
             material: new ColorMaterialProperty(Color.YELLOW),
             clampToGround: true,
           },
-        })
+        }) as LineEntity
         isDrawing = true
       } else {
         const endAnchor = addAnchor(position)!
@@ -467,13 +467,10 @@ const Area = ({ viewer }: AreaProps) => {
           startPositionRef.current!,
           position,
         ])
-        ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).isLine = true
-        ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).anchors = [
-          startAnchorRef.current!,
-          endAnchor,
-        ]
-        ;(startAnchorRef.current! as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
-        ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
+        line.isLine = true
+        line.anchors = [startAnchorRef.current!, endAnchor]
+        startAnchorRef.current!.connectedLines.add(line)
+        endAnchor.connectedLines.add(line)
         linesRef.current.push(line)
         polygonPositionsRef.current.push(position)
         if (
@@ -502,9 +499,9 @@ const Area = ({ viewer }: AreaProps) => {
                   heightReference: HeightReference.CLAMP_TO_GROUND,
                 }
               : undefined,
-          })
-          ;(areaEntity as Entity & { isArea: boolean; positions: Cartesian3[] }).isArea = true
-          ;(areaEntity as Entity & { positions: Cartesian3[] }).positions = polyPositions
+          }) as AreaEntity
+          areaEntity.isArea = true
+          areaEntity.positions = polyPositions
           for (const l of linesRef.current) {
             removeLine(l)
           }
@@ -530,7 +527,7 @@ const Area = ({ viewer }: AreaProps) => {
             material: new ColorMaterialProperty(Color.YELLOW),
             clampToGround: true,
           },
-        })
+        }) as LineEntity
         isDrawing = true
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
@@ -561,7 +558,7 @@ const Area = ({ viewer }: AreaProps) => {
         drawingLineRef.current = null
       }
       if (startAnchorRef.current) {
-        const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+        const anchor = startAnchorRef.current
         if (anchor.connectedLines.size === 0) {
           viewer.entities.remove(startAnchorRef.current)
           anchorsRef.current = anchorsRef.current.filter((a) => a !== startAnchorRef.current)
@@ -603,12 +600,8 @@ const Area = ({ viewer }: AreaProps) => {
         }
         const picked = viewer.scene.pick(event.position)
         if (picked) {
-          const entity = picked.id as Entity & {
-            isLine?: boolean
-            isAnchor?: boolean
-            isArea?: boolean
-          }
-          if (entity.isLine) {
+          const entity = picked.id as LineEntity | AnchorEntity | AreaEntity | undefined
+          if (entity && 'isLine' in entity && entity.isLine) {
             if (selectedLineRef.current && selectedLineRef.current !== entity) {
               unhighlightLine(selectedLineRef.current)
             }
@@ -623,8 +616,7 @@ const Area = ({ viewer }: AreaProps) => {
             selectedLineRef.current = entity
             highlightLine(entity)
             return
-          }
-          if (entity.isAnchor) {
+          } else if (entity && 'isAnchor' in entity && entity.isAnchor) {
             if (
               selectedAnchorRef.current &&
               selectedAnchorRef.current !== entity
@@ -642,8 +634,7 @@ const Area = ({ viewer }: AreaProps) => {
             selectedAnchorRef.current = entity
             highlightAnchor(entity)
             return
-          }
-          if (entity.isArea) {
+          } else if (entity && 'isArea' in entity && entity.isArea) {
             if (
               selectedAreaRef.current &&
               selectedAreaRef.current !== entity
@@ -707,7 +698,7 @@ const Area = ({ viewer }: AreaProps) => {
           drawingLineRef.current = null
         }
         if (startAnchorRef.current) {
-          const anchor = startAnchorRef.current as Entity & { connectedLines: Set<Entity> }
+          const anchor = startAnchorRef.current
           if (anchor.connectedLines.size === 0) {
             viewer?.entities.remove(startAnchorRef.current)
             anchorsRef.current = anchorsRef.current.filter(

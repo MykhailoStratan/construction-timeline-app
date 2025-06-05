@@ -4,22 +4,23 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
-import { Viewer, Entity, Cartesian3 } from 'cesium'
+import { Viewer, Cartesian3 } from 'cesium'
+import type { AnchorEntity, LineEntity, AreaEntity } from '../entityTypes'
 import { useDrawingEntities } from './useDrawingEntities'
 
 export interface DrawingContextType {
-  anchorsRef: React.MutableRefObject<Entity[]>
-  linesRef: React.MutableRefObject<Entity[]>
-  selectedLineRef: React.MutableRefObject<Entity | null>
-  selectedAnchorRef: React.MutableRefObject<Entity | null>
-  selectedAreaRef: React.MutableRefObject<Entity | null>
-  highlightLine: (line: Entity) => void
-  unhighlightLine: (line: Entity) => void
-  highlightAnchor: (anchor: Entity) => void
-  unhighlightAnchor: (anchor: Entity) => void
-  addAnchor: (position: Cartesian3) => Entity | null
-  removeLine: (line: Entity) => void
-  removeAnchor: (anchor: Entity) => void
+  anchorsRef: React.MutableRefObject<AnchorEntity[]>
+  linesRef: React.MutableRefObject<LineEntity[]>
+  selectedLineRef: React.MutableRefObject<LineEntity | null>
+  selectedAnchorRef: React.MutableRefObject<AnchorEntity | null>
+  selectedAreaRef: React.MutableRefObject<AreaEntity | null>
+  highlightLine: (line: LineEntity) => void
+  unhighlightLine: (line: LineEntity) => void
+  highlightAnchor: (anchor: AnchorEntity) => void
+  unhighlightAnchor: (anchor: AnchorEntity) => void
+  addAnchor: (position: Cartesian3) => AnchorEntity | null
+  removeLine: (line: LineEntity) => void
+  removeAnchor: (anchor: AnchorEntity) => void
 }
 
 interface DrawingProviderProps {
@@ -42,9 +43,9 @@ export const DrawingProvider = ({ viewer, children }: DrawingProviderProps) => {
     removeAnchor,
   } = useDrawingEntities(viewer)
 
-  const selectedLineRef = useRef<Entity | null>(null)
-  const selectedAnchorRef = useRef<Entity | null>(null)
-  const selectedAreaRef = useRef<Entity | null>(null)
+  const selectedLineRef = useRef<LineEntity | null>(null)
+  const selectedAnchorRef = useRef<AnchorEntity | null>(null)
+  const selectedAreaRef = useRef<AreaEntity | null>(null)
 
   return (
     <DrawingContext.Provider
