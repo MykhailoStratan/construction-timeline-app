@@ -14,6 +14,7 @@ import {
   Entity,
   HeightReference,
   EllipsoidTangentPlane,
+  PolygonHierarchy,
   Transforms,
   Matrix4,
   Matrix3,
@@ -179,7 +180,8 @@ const Area = ({ viewer }: AreaProps) => {
         const moved = poly.map((p) =>
           Cartesian3.add(p, translation, new Cartesian3()),
         )
-        area.polygon!.hierarchy = new ConstantProperty(moved)
+        area.polygon!.hierarchy =
+          new ConstantProperty(new PolygonHierarchy(moved))
         areaWithPositions.positions = moved
       }
       const ends = {
@@ -501,7 +503,7 @@ const Area = ({ viewer }: AreaProps) => {
           const areaEntity = viewer.entities.add({
             position: result?.centroid,
             polygon: {
-              hierarchy: polyPositions,
+              hierarchy: new PolygonHierarchy(polyPositions),
               material: new ColorMaterialProperty(Color.YELLOW.withAlpha(0.5)),
               outline: true,
               outlineColor: Color.YELLOW,
