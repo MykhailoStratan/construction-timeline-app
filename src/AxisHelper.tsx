@@ -4,6 +4,8 @@ import {
   Entity,
   CallbackProperty,
   ConstantPositionProperty,
+  ConstantProperty,
+  ColorMaterialProperty,
   Color,
   Cartesian3,
   Matrix4,
@@ -77,6 +79,20 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
 
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     const controller = viewer.scene.screenSpaceCameraController
+    const axisColors = { x: Color.RED, y: Color.GREEN, z: Color.BLUE }
+    const highlightAxis = (a: Entity) => {
+      if (a.polyline) {
+        a.polyline.material = new ColorMaterialProperty(Color.YELLOW)
+        a.polyline.width = new ConstantProperty(6)
+      }
+    }
+    const unhighlightAxis = (a: Entity) => {
+      const axis = (a as Entity & { isAxis?: string }).isAxis as 'x' | 'y' | 'z' | undefined
+      if (a.polyline) {
+        if (axis) a.polyline.material = new ColorMaterialProperty(axisColors[axis])
+        a.polyline.width = new ConstantProperty(4)
+      }
+    }
     let cameraState: Partial<Record<keyof typeof controller, boolean>> | null =
       null
     const freezeCamera = () => {
@@ -107,6 +123,7 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
     }
 
     let dragging: 'x' | 'y' | 'z' | null = null
+    let hovered: Entity | null = null
     let startMouse: Cartesian3 | null = null
     let startPlane: Plane | null = null
     const axisDirs: Record<string, Cartesian3> = { x: xDir, y: yDir, z: zDir }
@@ -142,6 +159,8 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
         const ent = picked.id as Entity & { isAxis?: string }
         if (ent.isAxis) {
           dragging = ent.isAxis as 'x' | 'y' | 'z'
+          highlightAxis(ent)
+          hovered = ent
           startMouse = getPosition(e)
           if (startMouse) {
             if (mode === '2d' && dragging !== 'z') {
@@ -165,10 +184,35 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
       dragging = null
       startMouse = null
       startPlane = null
+      if (hovered) {
+        unhighlightAxis(hovered)
+        hovered = null
+      }
       restoreCamera()
     }, ScreenSpaceEventType.LEFT_UP)
 
     handler.setInputAction((m: ScreenSpaceEventHandler.MotionEvent) => {
+      const picked = viewer.scene.pick(m.endPosition)
+      if (!dragging) {
+        if (picked) {
+          const ent = picked.id as Entity & { isAxis?: string }
+          if (ent.isAxis) {
+            if (hovered && hovered !== ent) {
+              unhighlightAxis(hovered)
+            }
+            if (hovered !== ent) {
+              highlightAxis(ent)
+              hovered = ent
+            }
+          } else if (hovered) {
+            unhighlightAxis(hovered)
+            hovered = null
+          }
+        } else if (hovered) {
+          unhighlightAxis(hovered)
+          hovered = null
+        }
+      }
       if (!dragging || !startMouse) return
       if (mode === '2d' && dragging !== 'z') {
         const endPos = getPosition(m)
@@ -199,6 +243,10 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
       viewer.entities.remove(x)
       viewer.entities.remove(y)
       if (z) viewer.entities.remove(z)
+      if (hovered) {
+        unhighlightAxis(hovered)
+        hovered = null
+      }
       restoreCamera()
     }
   }, [viewer, target, mode, onMove])
