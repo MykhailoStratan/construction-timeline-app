@@ -82,35 +82,41 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     [viewer],
   )
 
-  const highlightLine = (line: Entity) => {
-    if (line.polyline) {
-      line.polyline.material = new ColorMaterialProperty(Color.RED)
-      line.polyline.width = new ConstantProperty(3)
-    }
-    showLineAxis(line)
-  }
+  const highlightLine = useCallback(
+    (line: Entity) => {
+      if (line.polyline) {
+        line.polyline.material = new ColorMaterialProperty(Color.RED)
+        line.polyline.width = new ConstantProperty(3)
+      }
+      showLineAxis(line)
+    },
+    [showLineAxis],
+  )
 
-  const unhighlightLine = (line: Entity) => {
-    if (line.polyline) {
-      line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
-      line.polyline.width = new ConstantProperty(2)
-    }
-    setAxisProps(null)
-  }
+  const unhighlightLine = useCallback(
+    (line: Entity) => {
+      if (line.polyline) {
+        line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
+        line.polyline.width = new ConstantProperty(2)
+      }
+      setAxisProps(null)
+    },
+    [],
+  )
 
-  const highlightAnchor = (anchor: Entity) => {
+  const highlightAnchor = useCallback((anchor: Entity) => {
     if (anchor.point) {
       anchor.point.color = new ConstantProperty(Color.RED)
       anchor.point.pixelSize = new ConstantProperty(10)
     }
-  }
+  }, [])
 
-  const unhighlightAnchor = (anchor: Entity) => {
+  const unhighlightAnchor = useCallback((anchor: Entity) => {
     if (anchor.point) {
       anchor.point.color = new ConstantProperty(Color.ORANGE)
       anchor.point.pixelSize = new ConstantProperty(8)
     }
-  }
+  }, [])
 
   const removeLine = useCallback(
     (line: Entity) => {
@@ -412,7 +418,13 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       selectionHandlerRef.current?.destroy()
       selectionHandlerRef.current = null
     }
-  }, [viewer])
+  }, [
+    viewer,
+    highlightLine,
+    unhighlightLine,
+    highlightAnchor,
+    unhighlightAnchor,
+  ])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
