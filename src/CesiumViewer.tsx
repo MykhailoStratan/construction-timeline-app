@@ -7,7 +7,7 @@ import {
   Cartesian3,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
-import ToolsPanel from './ToolsPanel'
+import ToolsPanel from './components/ToolsPanel'
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
 if (ionToken) {
