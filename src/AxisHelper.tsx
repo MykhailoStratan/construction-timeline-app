@@ -174,8 +174,8 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
               Cartesian3.normalize(normal, normal)
               startPlane = Plane.fromPointNormal(startMouse, normal)
             }
-            freezeCamera()
           }
+          freezeCamera()
         }
       }
     }, ScreenSpaceEventType.LEFT_DOWN)
