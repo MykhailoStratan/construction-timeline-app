@@ -1,4 +1,4 @@
-// Line drawing component extracted from CesiumViewer
+// Area drawing component derived from LineDrawer
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Viewer,
@@ -13,11 +13,11 @@ import {
   HeightReference,
 } from 'cesium'
 
-interface LineDrawerProps {
+interface AreaProps {
   viewer: Viewer | null
 }
 
-const LineDrawer = ({ viewer }: LineDrawerProps) => {
+const Area = ({ viewer }: AreaProps) => {
   const drawHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const selectionHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const startPositionRef = useRef<Cartesian3 | null>(null)
@@ -26,8 +26,11 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const mousePositionRef = useRef<Cartesian3 | null>(null)
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
+  const selectedAreaRef = useRef<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
-  const [isLineMode, setIsLineMode] = useState(false)
+  const firstAnchorRef = useRef<Entity | null>(null)
+  const polygonPositionsRef = useRef<Cartesian3[]>([])
+  const [isAreaMode, setIsAreaMode] = useState(false)
 
   const highlightLine = (line: Entity) => {
     if (line.polyline) {
@@ -54,6 +57,24 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     if (anchor.point) {
       anchor.point.color = new ConstantProperty(Color.ORANGE)
       anchor.point.pixelSize = new ConstantProperty(8)
+    }
+  }
+
+  const highlightArea = (area: Entity) => {
+    if (area.polygon) {
+      area.polygon.material = new ColorMaterialProperty(
+        Color.RED.withAlpha(0.5),
+      )
+      area.polygon.outlineColor = new ConstantProperty(Color.RED)
+    }
+  }
+
+  const unhighlightArea = (area: Entity) => {
+    if (area.polygon) {
+      area.polygon.material = new ColorMaterialProperty(
+        Color.YELLOW.withAlpha(0.5),
+      )
+      area.polygon.outlineColor = new ConstantProperty(Color.YELLOW)
     }
   }
 
@@ -98,6 +119,16 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     [removeLine, viewer],
   )
 
+  const removeArea = useCallback(
+    (area: Entity) => {
+      if (!viewer) {
+        return
+      }
+      viewer.entities.remove(area)
+    },
+    [viewer],
+  )
+
   const addAnchor = (position: Cartesian3) => {
     if (!viewer) {
       return null
@@ -124,7 +155,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     return anchor
   }
 
-  const startLineMode = () => {
+  const startAreaMode = () => {
     if (!viewer) {
       return
     }
@@ -132,7 +163,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     if (drawHandlerRef.current) {
       drawHandlerRef.current.destroy()
       drawHandlerRef.current = null
-      setIsLineMode(false)
+      setIsAreaMode(false)
       if (drawingLineRef.current) {
         viewer.entities.remove(drawingLineRef.current)
         drawingLineRef.current = null
@@ -154,7 +185,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
 
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     drawHandlerRef.current = handler
-    setIsLineMode(true)
+    setIsAreaMode(true)
 
     let isDrawing = false
     let longPressTimeout: number | null = null
@@ -193,6 +224,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         startPositionRef.current = position
         mousePositionRef.current = position
         startAnchorRef.current = addAnchor(position)!
+        firstAnchorRef.current = startAnchorRef.current
+        polygonPositionsRef.current = [position]
         const dynamicPositions = new CallbackProperty(() => {
           if (!startPositionRef.current || !mousePositionRef.current) {
             return []
@@ -222,6 +255,24 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         ]
         ;(startAnchorRef.current! as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
         ;(endAnchor as Entity & { connectedLines: Set<Entity> }).connectedLines.add(line)
+        polygonPositionsRef.current.push(position)
+        if (endAnchor === firstAnchorRef.current && polygonPositionsRef.current.length >= 3) {
+          const polyPositions = [...polygonPositionsRef.current]
+          const area = viewer.entities.add({
+            polygon: {
+              hierarchy: polyPositions,
+              material: new ColorMaterialProperty(Color.YELLOW.withAlpha(0.5)),
+              outline: true,
+              outlineColor: Color.YELLOW,
+              heightReference: HeightReference.CLAMP_TO_GROUND,
+            },
+          })
+          ;(area as Entity & { isArea: boolean }).isArea = true
+          firstAnchorRef.current = null
+          polygonPositionsRef.current = []
+          finishDrawing()
+          return
+        }
         startPositionRef.current = position
         startAnchorRef.current = endAnchor
         mousePositionRef.current = position
@@ -278,6 +329,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       }
       startPositionRef.current = null
       mousePositionRef.current = null
+      firstAnchorRef.current = null
+      polygonPositionsRef.current = []
       isDrawing = false
     }
 
@@ -312,6 +365,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           const entity = picked.id as Entity & {
             isLine?: boolean
             isAnchor?: boolean
+            isArea?: boolean
           }
           if (entity.isLine) {
             if (selectedLineRef.current && selectedLineRef.current !== entity) {
@@ -320,6 +374,10 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
             if (selectedAnchorRef.current) {
               unhighlightAnchor(selectedAnchorRef.current)
               selectedAnchorRef.current = null
+            }
+            if (selectedAreaRef.current) {
+              unhighlightArea(selectedAreaRef.current)
+              selectedAreaRef.current = null
             }
             selectedLineRef.current = entity
             highlightLine(entity)
@@ -336,8 +394,31 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
               unhighlightLine(selectedLineRef.current)
               selectedLineRef.current = null
             }
+            if (selectedAreaRef.current) {
+              unhighlightArea(selectedAreaRef.current)
+              selectedAreaRef.current = null
+            }
             selectedAnchorRef.current = entity
             highlightAnchor(entity)
+            return
+          }
+          if (entity.isArea) {
+            if (
+              selectedAreaRef.current &&
+              selectedAreaRef.current !== entity
+            ) {
+              unhighlightArea(selectedAreaRef.current)
+            }
+            if (selectedLineRef.current) {
+              unhighlightLine(selectedLineRef.current)
+              selectedLineRef.current = null
+            }
+            if (selectedAnchorRef.current) {
+              unhighlightAnchor(selectedAnchorRef.current)
+              selectedAnchorRef.current = null
+            }
+            selectedAreaRef.current = entity
+            highlightArea(entity)
             return
           }
         }
@@ -348,6 +429,10 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         if (selectedAnchorRef.current) {
           unhighlightAnchor(selectedAnchorRef.current)
           selectedAnchorRef.current = null
+        }
+        if (selectedAreaRef.current) {
+          unhighlightArea(selectedAreaRef.current)
+          selectedAreaRef.current = null
         }
       },
       ScreenSpaceEventType.LEFT_CLICK,
@@ -364,7 +449,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       if (event.key === 'Escape' && drawHandlerRef.current) {
         drawHandlerRef.current.destroy()
         drawHandlerRef.current = null
-        setIsLineMode(false)
+        setIsAreaMode(false)
         if (drawingLineRef.current) {
           viewer?.entities.remove(drawingLineRef.current)
           drawingLineRef.current = null
@@ -389,6 +474,9 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
         } else if (selectedAnchorRef.current) {
           removeAnchor(selectedAnchorRef.current)
           selectedAnchorRef.current = null
+        } else if (selectedAreaRef.current) {
+          removeArea(selectedAreaRef.current)
+          selectedAreaRef.current = null
         }
       }
     }
@@ -396,16 +484,16 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isLineMode, removeLine, removeAnchor, viewer])
+  }, [isAreaMode, removeLine, removeAnchor, removeArea, viewer])
 
   return (
     <button
-      onClick={startLineMode}
-      style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
+      onClick={startAreaMode}
+      style={{ border: isAreaMode ? '2px solid yellow' : '1px solid gray' }}
     >
-      Line
+      Area
     </button>
   )
 }
 
-export default LineDrawer
+export default Area
