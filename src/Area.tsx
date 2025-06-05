@@ -20,6 +20,47 @@ import {
 } from 'cesium'
 import AxisHelper from './AxisHelper'
 
+function computeAreaAndCentroid(
+  viewer: Viewer | null,
+  positions: Cartesian3[],
+): { area: number; centroid: Cartesian3 } | null {
+  if (!viewer || positions.length < 3) {
+    return null
+  }
+  const plane = EllipsoidTangentPlane.fromPoints(
+    positions,
+    viewer.scene.globe.ellipsoid,
+  )
+  const projected = plane.projectPointsOntoPlane(positions, [])
+  if (projected.length < 3) {
+    return null
+  }
+  let signedArea = 0
+  let cx = 0
+  let cy = 0
+  for (let i = 0, j = projected.length - 1; i < projected.length; j = i++) {
+    const p0 = projected[j]
+    const p1 = projected[i]
+    const f = p0.x * p1.y - p1.x * p0.y
+    signedArea += f
+    cx += (p0.x + p1.x) * f
+    cy += (p0.y + p1.y) * f
+  }
+  signedArea *= 0.5
+  if (signedArea === 0) {
+    return null
+  }
+  const area = Math.abs(signedArea)
+  cx /= 6 * signedArea
+  cy /= 6 * signedArea
+  const centroid2D = new Cartesian2(cx, cy)
+  const centroid = plane.projectPointOntoEllipsoid(
+    centroid2D,
+    new Cartesian3(),
+  )
+  return { area, centroid }
+}
+
 interface AreaProps {
   viewer: Viewer | null
 }
@@ -117,7 +158,7 @@ const Area = ({ viewer }: AreaProps) => {
         )
       }
       ;(selectedArea as Entity & { positions?: Cartesian3[] }).positions = moved
-      const result = computeAreaAndCentroid(moved)
+      const result = computeAreaAndCentroid(viewer, moved)
       if (result) {
         selectedArea.position = new ConstantPositionProperty(result.centroid)
         if (selectedArea.label) {
@@ -127,53 +168,13 @@ const Area = ({ viewer }: AreaProps) => {
         }
       }
     },
-    [viewer, selectedArea, computeAreaAndCentroid],
+    [viewer, selectedArea],
   )
 
 
 
 
 
-
-  function computeAreaAndCentroid(
-    positions: Cartesian3[],
-  ): { area: number; centroid: Cartesian3 } | null {
-    if (!viewer || positions.length < 3) {
-      return null
-    }
-    const plane = EllipsoidTangentPlane.fromPoints(
-      positions,
-      viewer.scene.globe.ellipsoid,
-    )
-    const projected = plane.projectPointsOntoPlane(positions, [])
-    if (projected.length < 3) {
-      return null
-    }
-    let signedArea = 0
-    let cx = 0
-    let cy = 0
-    for (let i = 0, j = projected.length - 1; i < projected.length; j = i++) {
-      const p0 = projected[j]
-      const p1 = projected[i]
-      const f = p0.x * p1.y - p1.x * p0.y
-      signedArea += f
-      cx += (p0.x + p1.x) * f
-      cy += (p0.y + p1.y) * f
-    }
-    signedArea *= 0.5
-    if (signedArea === 0) {
-      return null
-    }
-    const area = Math.abs(signedArea)
-    cx /= 6 * signedArea
-    cy /= 6 * signedArea
-    const centroid2D = new Cartesian2(cx, cy)
-    const centroid = plane.projectPointOntoEllipsoid(
-      centroid2D,
-      new Cartesian3(),
-    )
-    return { area, centroid }
-  }
 
 
   const removeLine = useCallback(
@@ -361,7 +362,7 @@ const Area = ({ viewer }: AreaProps) => {
           polygonPositionsRef.current.length >= 3
         ) {
           const polyPositions = [...polygonPositionsRef.current]
-          const result = computeAreaAndCentroid(polyPositions)
+          const result = computeAreaAndCentroid(viewer, polyPositions)
           const areaEntity = viewer.entities.add({
             position: result?.centroid,
             polygon: {
