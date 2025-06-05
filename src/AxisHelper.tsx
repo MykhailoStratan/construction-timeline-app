@@ -38,7 +38,11 @@ const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperPro
     const zDir = Matrix3.getColumn(rot, 2, new Cartesian3())
     const offset = Cartesian3.multiplyByScalar(xDir, 10, new Cartesian3())
     const len = 20
+    let dragPos: Cartesian3 | null = null
     const basePos = () => {
+      if (dragPos) {
+        return dragPos
+      }
       const p = getPosition()
       return p ? Cartesian3.add(p, offset, new Cartesian3()) : null
     }
@@ -129,6 +133,7 @@ const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperPro
         if (ent.isAxis) {
           dragging = ent.isAxis as 'x' | 'y' | 'z'
           startMouse = positionFromEvent(e)
+          dragPos = startMouse
           if (startMouse) {
             const cameraDir = viewer.camera.direction
             let normal = Cartesian3.cross(
@@ -159,6 +164,7 @@ const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperPro
       dragging = null
       startMouse = null
       startPlane = null
+      dragPos = null
       restore()
     }, ScreenSpaceEventType.LEFT_UP)
 
@@ -176,6 +182,7 @@ const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperPro
         const translation = Cartesian3.multiplyByScalar(dir, amount, new Cartesian3())
         onTranslate(translation)
         startMouse = endPos
+        dragPos = endPos
         return
       }
       const picked = viewer.scene.pick(m.endPosition)
@@ -209,6 +216,7 @@ const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperPro
         handlerRef.current.destroy()
         handlerRef.current = null
       }
+      dragPos = null
       restore()
     }
   }, [viewer, enableZ, getPosition, onTranslate])
