@@ -7,7 +7,7 @@ import {
   Cartesian3,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
-import LineDrawer from './LineDrawer'
+import ToolsPanel from './ToolsPanel'
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
 if (ionToken) {
@@ -55,7 +55,7 @@ const CesiumViewer = () => {
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
       <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
-      <LineDrawer viewer={viewer} />
+      <ToolsPanel viewer={viewer} />
     </div>
   )
 }
