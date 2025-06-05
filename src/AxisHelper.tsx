@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef } from "react";
 import {
   Viewer,
   Entity,
@@ -13,135 +13,164 @@ import {
   Plane,
   IntersectionTests,
   ConstantProperty,
-} from 'cesium'
+} from "cesium";
 
 export interface AxisHelperProps {
-  viewer: Viewer
-  enableZ?: boolean
-  getPosition: () => Cartesian3 | null
-  onTranslate: (translation: Cartesian3) => void
+  viewer: Viewer;
+  enableZ?: boolean;
+  getPosition: () => Cartesian3 | null;
+  onTranslate: (translation: Cartesian3) => void;
 }
 
-const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperProps) => {
-  const axisRef = useRef<{ x: Entity; y: Entity; z?: Entity } | null>(null)
-  const handlerRef = useRef<ScreenSpaceEventHandler | null>(null)
+const AxisHelper = ({
+  viewer,
+  enableZ,
+  getPosition,
+  onTranslate,
+}: AxisHelperProps) => {
+  const axisRef = useRef<{ x: Entity; y: Entity; z?: Entity } | null>(null);
+  const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
 
   useEffect(() => {
-    const center = getPosition()
+    const center = getPosition();
     if (!center) {
-      return
+      return;
     }
-    const transform = Transforms.eastNorthUpToFixedFrame(center)
-    const rot = Matrix4.getMatrix3(transform, new Matrix3())
-    const xDir = Matrix3.getColumn(rot, 0, new Cartesian3())
-    const yDir = Matrix3.getColumn(rot, 1, new Cartesian3())
-    const zDir = Matrix3.getColumn(rot, 2, new Cartesian3())
-    const offset = Cartesian3.multiplyByScalar(xDir, 10, new Cartesian3())
-    const len = 20
-    });
-    });
-    let z: Entity | undefined;
-      });
-    ;(x as Entity & { isAxis: string }).isAxis = 'x';
-    ;(y as Entity & { isAxis: string }).isAxis = 'y';
-      ;(z as Entity & { isAxis: string }).isAxis = 'z';
-    }
-    axisRef.current = { x, y, z };
-      new CallbackProperty(() => {
-        const pos = basePos()
-        if (!pos) {
-          return []
-        }
-        const end = Cartesian3.add(
-          pos,
-          Cartesian3.multiplyByScalar(dir, len, new Cartesian3()),
-          new Cartesian3(),
-        )
-        return [pos, end]
-      }, false)
-
-    const x = viewer.entities.add({
-      polyline: { positions: axisPositions(xDir), material: Color.RED, width: 4 },
-    })
-    const y = viewer.entities.add({
+    const transform = Transforms.eastNorthUpToFixedFrame(center);
+    const rot = Matrix4.getMatrix3(transform, new Matrix3());
+    const xDir = Matrix3.getColumn(rot, 0, new Cartesian3());
+    const yDir = Matrix3.getColumn(rot, 1, new Cartesian3());
+    const zDir = Matrix3.getColumn(rot, 2, new Cartesian3());
+    const offset = Cartesian3.multiplyByScalar(xDir, 10, new Cartesian3());
+    const len = 20;
+      const p = getPosition();
+      return p ? Cartesian3.add(p, offset, new Cartesian3()) : null;
+    };
+        const pos = basePos();
+          return [];
+        );
+        return [pos, end];
+      }, false);
       polyline: {
-        positions: axisPositions(yDir),
-    const groundFromEvent = (
-    const planeIntersection = (
-      event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
-      plane: Plane,
-    ): Cartesian3 | null => {
-      const pos = 'position' in event ? event.position : event.endPosition
-      const ray = viewer.camera.getPickRay(pos)
-      if (!ray) return null
-      return IntersectionTests.rayPlane(ray, plane, new Cartesian3()) || null
-    }
-
-          if (dragging === 'z') {
-            const base = getPosition()
-            if (!base) return
-              viewer.camera.direction,
-              zDir,
-              normal = Cartesian3.cross(viewer.camera.up, zDir, new Cartesian3())
-            startPlane = Plane.fromPointNormal(base, normal)
-            startMouse = planeIntersection(e, startPlane)
-          } else {
-            startMouse = groundFromEvent(e)
-        if (dragging === 'z') {
-          if (!startPlane) return
-          const endPos = planeIntersection(m, startPlane)
-          if (!endPos) return
-          const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
-          const amount = Cartesian3.dot(diff, zDir) * speed
-          const translation = Cartesian3.multiplyByScalar(zDir, amount, new Cartesian3())
-          onTranslate(translation)
-          startMouse = endPos
-          return
-        }
-        const endPos = groundFromEvent(m)
-        const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
-    if (z) {
-      ;(z as Entity & { isAxis: string }).isAxis = 'z'
-    }
-    axisRef.current = { x, y, z }
-
-    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
-    handlerRef.current = handler
-    let dragging: 'x' | 'y' | 'z' | null = null
-    let startMouse: Cartesian3 | null = null
-    let startPlane: Plane | null = null
-    const axisDirs = { x: xDir, y: yDir, z: zDir }
-    const speed = 0.5
-
-    const positionFromEvent = (
-      event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
-    ): Cartesian3 | null => {
-      const pos = 'position' in event ? event.position : event.endPosition
-      const ray = viewer.camera.getPickRay(pos)
-      if (ray) {
-        const ground = viewer.scene.globe.pick(ray, viewer.scene)
-        if (ground) {
-          return ground
-        }
-      }
-      return viewer.camera.pickEllipsoid(pos) || null
-    }
-
-    const controller = viewer.scene.screenSpaceCameraController
-    const state = {
-      enableRotate: controller.enableRotate,
-      enableTranslate: controller.enableTranslate,
-      enableZoom: controller.enableZoom,
-      enableTilt: controller.enableTilt,
-      enableLook: controller.enableLook,
-    }
-
-    const restore = () => {
-      controller.enableRotate = state.enableRotate
-      controller.enableTranslate = state.enableTranslate
-      controller.enableZoom = state.enableZoom
-      controller.enableTilt = state.enableTilt
-      controller.enableLook = state.enableLook
+        positions: axisPositions(xDir),
+        material: Color.RED,
+        width: 4,
+      },
+    (x as Entity & { isAxis: string }).isAxis = "x";
+    (y as Entity & { isAxis: string }).isAxis = "y";
+      (z as Entity & { isAxis: string }).isAxis = "z";
+    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+    handlerRef.current = handler;
+    let dragging: "x" | "y" | "z" | null = null;
+    let startMouse: Cartesian3 | null = null;
+    let startPlane: Plane | null = null;
+    const axisDirs = { x: xDir, y: yDir, z: zDir };
+    const speed = 0.5;
+      event:
+        | ScreenSpaceEventHandler.PositionedEvent
+        | ScreenSpaceEventHandler.MotionEvent,
+      const pos = "position" in event ? event.position : event.endPosition;
+      const ray = viewer.camera.getPickRay(pos);
+        const ground = viewer.scene.globe.pick(ray, viewer.scene);
+          return ground;
+      return viewer.camera.pickEllipsoid(pos) || null;
+    };
+      event:
+        | ScreenSpaceEventHandler.PositionedEvent
+        | ScreenSpaceEventHandler.MotionEvent,
+      const pos = "position" in event ? event.position : event.endPosition;
+      const ray = viewer.camera.getPickRay(pos);
+      if (!ray) return null;
+      return IntersectionTests.rayPlane(ray, plane, new Cartesian3()) || null;
+    };
+    const controller = viewer.scene.screenSpaceCameraController;
+    };
+      controller.enableRotate = state.enableRotate;
+      controller.enableTranslate = state.enableTranslate;
+      controller.enableZoom = state.enableZoom;
+      controller.enableTilt = state.enableTilt;
+      controller.enableLook = state.enableLook;
+    };
+      const picked = viewer.scene.pick(e.position);
+        const ent = picked.id as Entity & { isAxis?: string };
+          dragging = ent.isAxis as "x" | "y" | "z";
+          if (dragging === "z") {
+            const base = getPosition();
+            if (!base) return;
+            );
+              normal = Cartesian3.cross(
+                viewer.camera.up,
+                zDir,
+                new Cartesian3(),
+              );
+            Cartesian3.normalize(normal, normal);
+            startPlane = Plane.fromPointNormal(base, normal);
+            startMouse = planeIntersection(e, startPlane);
+            startMouse = groundFromEvent(e);
+          controller.enableRotate = false;
+          controller.enableTranslate = false;
+          controller.enableZoom = false;
+          controller.enableTilt = false;
+          controller.enableLook = false;
+    }, ScreenSpaceEventType.LEFT_DOWN);
+      dragging = null;
+      startMouse = null;
+      startPlane = null;
+      restore();
+    }, ScreenSpaceEventType.LEFT_UP);
+    let hovered: Entity | null = null;
+        if (dragging === "z") {
+          if (!startPlane) return;
+          const endPos = planeIntersection(m, startPlane);
+          if (!endPos) return;
+          const diff = Cartesian3.subtract(
+            endPos,
+            startMouse,
+            new Cartesian3(),
+          );
+          const amount = Cartesian3.dot(diff, zDir) * speed;
+          const translation = Cartesian3.multiplyByScalar(
+            zDir,
+            amount,
+            new Cartesian3(),
+          );
+          onTranslate(translation);
+          startMouse = endPos;
+          return;
+        const endPos = groundFromEvent(m);
+        if (!endPos) return;
+        const dir = axisDirs[dragging];
+        const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3());
+        const amount = Cartesian3.dot(diff, dir) * speed;
+        const translation = Cartesian3.multiplyByScalar(
+          dir,
+          amount,
+          new Cartesian3(),
+        );
+        onTranslate(translation);
+        startMouse = endPos;
+        return;
+      const picked = viewer.scene.pick(m.endPosition);
+        const ent = picked.id as Entity & { isAxis?: string };
+            hovered.polyline!.width = new ConstantProperty(4);
+          hovered = ent;
+          hovered.polyline!.width = new ConstantProperty(8);
+          return;
+        hovered.polyline!.width = new ConstantProperty(4);
+        hovered = null;
+    }, ScreenSpaceEventType.MOUSE_MOVE);
+        viewer.entities.remove(axisRef.current.x);
+        viewer.entities.remove(axisRef.current.y);
+          viewer.entities.remove(axisRef.current.z);
+        axisRef.current = null;
+        handlerRef.current.destroy();
+        handlerRef.current = null;
+      restore();
+    };
+  }, [viewer, enableZ, getPosition, onTranslate]);
+  return null;
+};
+export default AxisHelper;
     }
 
     handler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
