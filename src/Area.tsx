@@ -46,6 +46,9 @@ const Area = ({ viewer }: AreaProps) => {
       }
     | null
   >(null)
+  const axisAreaRef = useRef<Entity | null>(null)
+  const movedPositionsRef = useRef<Cartesian3[] | null>(null)
+  const hierarchyCallbackRef = useRef<CallbackProperty | null>(null)
   const axisHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
   const cameraStateRef = useRef<
     | {
@@ -114,6 +117,16 @@ const Area = ({ viewer }: AreaProps) => {
       viewer.entities.remove(axisHelperRef.current.z)
       axisHelperRef.current = null
     }
+    if (axisAreaRef.current && movedPositionsRef.current) {
+      axisAreaRef.current.polygon!.hierarchy = new ConstantProperty(
+        new PolygonHierarchy(movedPositionsRef.current),
+      )
+      ;(axisAreaRef.current as Entity & { positions?: Cartesian3[] }).positions =
+        movedPositionsRef.current
+      axisAreaRef.current = null
+      movedPositionsRef.current = null
+      hierarchyCallbackRef.current = null
+    }
     axisHandlerRef.current?.destroy()
     axisHandlerRef.current = null
     restoreCamera()
@@ -134,38 +147,39 @@ const Area = ({ viewer }: AreaProps) => {
     const yDir = Matrix3.getColumn(rot, 1, new Cartesian3())
     const zDir = Matrix3.getColumn(rot, 2, new Cartesian3())
     const len = 20
-    const xEnd = Cartesian3.add(
-      center,
-      Cartesian3.multiplyByScalar(xDir, len, new Cartesian3()),
-      new Cartesian3(),
-    )
-    const yEnd = Cartesian3.add(
-      center,
-      Cartesian3.multiplyByScalar(yDir, len, new Cartesian3()),
-      new Cartesian3(),
-    )
-    const zEnd = Cartesian3.add(
-      center,
-      Cartesian3.multiplyByScalar(zDir, len, new Cartesian3()),
-      new Cartesian3(),
-    )
+    const axisPositions = (dir: Cartesian3) =>
+      new CallbackProperty(() => {
+        const pos = axisAreaRef.current?.position?.getValue(
+          viewer.clock.currentTime,
+        )
+        if (!pos) {
+          return []
+        }
+        const end = Cartesian3.add(
+          pos,
+          Cartesian3.multiplyByScalar(dir, len, new Cartesian3()),
+          new Cartesian3(),
+        )
+        return [pos, end]
+      }, false)
+
     const x = viewer.entities.add({
       polyline: {
-        positions: [center, xEnd],
+        positions: axisPositions(xDir),
         material: Color.RED,
         width: 4,
       },
     })
     const y = viewer.entities.add({
       polyline: {
-        positions: [center, yEnd],
+        positions: axisPositions(yDir),
         material: Color.GREEN,
         width: 4,
       },
     })
     const z = viewer.entities.add({
       polyline: {
-        positions: [center, zEnd],
+        positions: axisPositions(zDir),
         material: Color.BLUE,
         width: 4,
       },
@@ -196,34 +210,26 @@ const Area = ({ viewer }: AreaProps) => {
     }
 
     const axisDirs = { x: xDir, y: yDir, z: zDir }
+    movedPositionsRef.current = (
+      (area as Entity & { positions?: Cartesian3[] }).positions || []
+    ).map((p) => Cartesian3.clone(p))
+    hierarchyCallbackRef.current = new CallbackProperty(() => {
+      return new PolygonHierarchy(movedPositionsRef.current || [])
+    }, false)
+    area.polygon!.hierarchy = hierarchyCallbackRef.current
+    axisAreaRef.current = area
+
     const update = (translation: Cartesian3) => {
       const pos = area.position?.getValue(viewer.clock.currentTime)
-      if (!pos) return
+      if (!pos || !movedPositionsRef.current) return
       const newPos = Cartesian3.add(pos, translation, new Cartesian3())
       area.position = new ConstantPositionProperty(newPos)
-      const areaWithPositions = area as Entity & { positions?: Cartesian3[] }
-      const poly = areaWithPositions.positions
-      if (poly) {
-        const moved = poly.map((p) =>
-          Cartesian3.add(p, translation, new Cartesian3()),
-        )
-        area.polygon!.hierarchy =
-          new ConstantProperty(new PolygonHierarchy(moved))
-        areaWithPositions.positions = moved
-      }
-      const ends = {
-        x: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(xDir, len, new Cartesian3()), new Cartesian3()),
-        y: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(yDir, len, new Cartesian3()), new Cartesian3()),
-        z: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(zDir, len, new Cartesian3()), new Cartesian3()),
-      }
-      if (axisHelperRef.current) {
-        axisHelperRef.current.x.polyline!.positions =
-          new ConstantProperty([newPos, ends.x])
-        axisHelperRef.current.y.polyline!.positions =
-          new ConstantProperty([newPos, ends.y])
-        axisHelperRef.current.z.polyline!.positions =
-          new ConstantProperty([newPos, ends.z])
-      }
+      movedPositionsRef.current = movedPositionsRef.current.map((p) =>
+        Cartesian3.add(p, translation, new Cartesian3()),
+      )
+      ;(area as Entity & { positions?: Cartesian3[] }).positions =
+        movedPositionsRef.current
+      // Axis helper positions update via CallbackProperty
     }
 
     handler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
