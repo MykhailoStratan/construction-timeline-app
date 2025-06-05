@@ -40,7 +40,6 @@ const Area = ({ viewer }: AreaProps) => {
   const firstAnchorRef = useRef<Entity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
   const [isAreaMode, setIsAreaMode] = useState(false)
-  const [dragTick, setDragTick] = useState(0)
 
   const highlightLine = (line: Entity) => {
     if (line.polyline) {
@@ -127,7 +126,6 @@ const Area = ({ viewer }: AreaProps) => {
           )
         }
       }
-      setDragTick((t) => t + 1)
     },
     [viewer, selectedArea, computeAreaAndCentroid],
   )
@@ -631,7 +629,6 @@ const Area = ({ viewer }: AreaProps) => {
           target={selectedArea}
           onMove={moveSelectedArea}
           mode="2d"
-          key={dragTick}
         />
       )}
     </>

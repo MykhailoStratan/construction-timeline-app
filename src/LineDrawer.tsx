@@ -31,7 +31,6 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const [selectedLine, setSelectedLine] = useState<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
   const [isLineMode, setIsLineMode] = useState(false)
-  const [dragTick, setDragTick] = useState(0)
 
   const highlightLine = (line: Entity) => {
     if (line.polyline) {
@@ -88,7 +87,6 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           a.position = new ConstantPositionProperty(newPos)
         })
       }
-      setDragTick((t) => t + 1)
     },
     [viewer, selectedLine],
   )
@@ -456,7 +454,6 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           target={selectedLine}
           onMove={moveSelectedLine}
           mode="2d"
-          key={dragTick}
         />
       )}
     </>
