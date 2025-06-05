@@ -135,9 +135,9 @@ const Area = ({ viewer }: AreaProps) => {
 
 
 
-  const computeAreaAndCentroid = (
+  function computeAreaAndCentroid(
     positions: Cartesian3[],
-  ): { area: number; centroid: Cartesian3 } | null => {
+  ): { area: number; centroid: Cartesian3 } | null {
     if (!viewer || positions.length < 3) {
       return null
     }

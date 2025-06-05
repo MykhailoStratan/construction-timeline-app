@@ -8,6 +8,7 @@ import {
   Color,
   ColorMaterialProperty,
   ConstantProperty,
+  ConstantPositionProperty,
   Cartesian3,
   Entity,
   HeightReference,
@@ -83,7 +84,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       if (lineWithAnchors.anchors) {
         lineWithAnchors.anchors.forEach((a, i) => {
           const newPos = moved[i]
-          a.position = new ConstantProperty(newPos)
+          a.position = new ConstantPositionProperty(newPos)
         })
       }
     },

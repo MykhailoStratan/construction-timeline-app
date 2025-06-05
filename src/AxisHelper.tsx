@@ -3,6 +3,7 @@ import {
   Viewer,
   Entity,
   CallbackProperty,
+  ConstantPositionProperty,
   Color,
   Cartesian3,
   Matrix4,
@@ -99,11 +100,11 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
         const current = target.position?.getValue(viewer.clock.currentTime)
         if (!current) return
         const newPos = Cartesian3.add(current, translation, new Cartesian3())
-        target.position = new CallbackProperty(() => newPos, false)
+        target.position = new ConstantPositionProperty(newPos)
       }
     }
 
-    handler.setInputAction((e) => {
+    handler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
       const picked = viewer.scene.pick(e.position)
       if (picked) {
         const ent = picked.id as Entity & { isAxis?: string }
@@ -129,7 +130,7 @@ const AxisHelper = ({ viewer, target, mode = '2d', onMove }: AxisHelperProps) =>
       startPlane = null
     }, ScreenSpaceEventType.LEFT_UP)
 
-    handler.setInputAction((m) => {
+    handler.setInputAction((m: ScreenSpaceEventHandler.MotionEvent) => {
       if (dragging && startMouse && startPlane) {
         const ray = viewer.camera.getPickRay(m.endPosition)
         if (!ray) return
