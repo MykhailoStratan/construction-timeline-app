@@ -569,12 +569,12 @@ export default function useAreaDrawing(viewer: Viewer | null) {
           polygonPositionsRef.current.length >= 3
         ) {
           const polyPositions = [...polygonPositionsRef.current]
-          const result = computeAreaAndCentroid(
+          const approx = computeAreaAndCentroid(
             polyPositions,
             viewer.scene.globe.ellipsoid,
           )
           const areaEntity = viewer.entities.add({
-            position: result?.centroid,
+            position: approx?.centroid,
             polygon: {
               hierarchy: new PolygonHierarchy(polyPositions),
               material: new ColorMaterialProperty(Color.YELLOW.withAlpha(0.5)),
@@ -582,9 +582,9 @@ export default function useAreaDrawing(viewer: Viewer | null) {
               outlineColor: Color.YELLOW,
               heightReference: HeightReference.CLAMP_TO_GROUND,
             },
-            label: result
+            label: approx
               ? {
-                  text: `${Math.round(result.area)} m²`,
+                  text: `${Math.round(approx.area)} m²`,
                   fillColor: Color.BLACK,
                   style: LabelStyle.FILL,
                   showBackground: true,
@@ -593,6 +593,34 @@ export default function useAreaDrawing(viewer: Viewer | null) {
                   heightReference: HeightReference.CLAMP_TO_GROUND,
                 }
               : undefined,
+          })
+          computeAreaWithTerrain(
+            polyPositions,
+            (c) => viewer.scene.sampleHeightMostDetailed(c),
+          ).then((result) => {
+            if (!result) {
+              return
+            }
+            areaEntity.position = new ConstantPositionProperty(result.centroid)
+            if (areaEntity.label) {
+              areaEntity.label.text = new ConstantProperty(
+                `${Math.round(result.area)} m²`,
+              )
+            } else {
+              areaEntity.label = new LabelGraphics({
+                text: new ConstantProperty(`${Math.round(result.area)} m²`),
+                fillColor: new ConstantProperty(Color.BLACK),
+                style: new ConstantProperty(LabelStyle.FILL),
+                showBackground: new ConstantProperty(true),
+                backgroundColor: new ConstantProperty(
+                  Color.WHITE.withAlpha(0.5),
+                ),
+                verticalOrigin: new ConstantProperty(VerticalOrigin.CENTER),
+                heightReference: new ConstantProperty(
+                  HeightReference.CLAMP_TO_GROUND,
+                ),
+              })
+            }
           })
           ;(areaEntity as Entity & { isArea: boolean; positions: Cartesian3[] }).isArea = true
           ;(areaEntity as Entity & { positions: Cartesian3[] }).positions = polyPositions
