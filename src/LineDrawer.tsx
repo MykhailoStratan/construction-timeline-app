@@ -324,6 +324,15 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     selectedAnchorRef,
   ])
 
+  useEffect(() => {
+    return () => {
+      drawHandlerRef.current?.destroy()
+      drawHandlerRef.current = null
+      selectionHandlerRef.current?.destroy()
+      selectionHandlerRef.current = null
+    }
+  }, [])
+
   return (
     <button
       onClick={startLineMode}

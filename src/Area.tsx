@@ -741,6 +741,18 @@ const Area = ({ viewer }: AreaProps) => {
     selectedAreaRef,
   ])
 
+  useEffect(() => {
+    return () => {
+      drawHandlerRef.current?.destroy()
+      drawHandlerRef.current = null
+      selectionHandlerRef.current?.destroy()
+      selectionHandlerRef.current = null
+      axisHandlerRef.current?.destroy()
+      axisHandlerRef.current = null
+      removeAxisHelper()
+    }
+  }, [removeAxisHelper])
+
   return (
     <button
       onClick={startAreaMode}
