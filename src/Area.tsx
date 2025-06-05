@@ -13,7 +13,6 @@ import {
   Entity,
   HeightReference,
   EllipsoidTangentPlane,
-  PolygonPipeline,
   LabelStyle,
   VerticalOrigin,
 } from 'cesium'
@@ -97,23 +96,22 @@ const Area = ({ viewer }: AreaProps) => {
     if (projected.length < 3) {
       return null
     }
-    const area2D = PolygonPipeline.computeArea2D(projected)
+    let signedArea = 0
     let cx = 0
     let cy = 0
-    let factor = 0
     for (let i = 0, j = projected.length - 1; i < projected.length; j = i++) {
       const p0 = projected[j]
       const p1 = projected[i]
       const f = p0.x * p1.y - p1.x * p0.y
-      factor += f
+      signedArea += f
       cx += (p0.x + p1.x) * f
       cy += (p0.y + p1.y) * f
     }
-    const area = Math.abs(area2D)
-    const signedArea = factor * 0.5
+    signedArea *= 0.5
     if (signedArea === 0) {
       return null
     }
+    const area = Math.abs(signedArea)
     cx /= 6 * signedArea
     cy /= 6 * signedArea
     const centroid2D = new Cartesian2(cx, cy)
