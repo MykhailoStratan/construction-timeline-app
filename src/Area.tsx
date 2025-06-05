@@ -20,6 +20,8 @@ import {
   Transforms,
   Matrix4,
   Matrix3,
+  OrientedBoundingBox,
+  Cesium3DTileFeature,
   LabelStyle,
   VerticalOrigin,
   Cartographic,
@@ -471,6 +473,72 @@ const Area = ({ viewer }: AreaProps) => {
     }
   }
 
+  const computeFootprint = (
+    feature: Cesium3DTileFeature,
+  ): Cartesian3[] | null => {
+    const f = feature as unknown as {
+      content?: {
+        _polygons?: { _boundingVolumes?: OrientedBoundingBox[] }
+        _boundingVolume?: OrientedBoundingBox
+      }
+    }
+    const obb: OrientedBoundingBox | undefined =
+      f.content?._polygons?._boundingVolumes?.[feature.featureId] ||
+      f.content?._boundingVolume
+    if (!obb) {
+      return null
+    }
+    const corners = OrientedBoundingBox.computeCorners(obb, [])
+    corners.sort((a, b) => {
+      const ha = Cartographic.fromCartesian(a).height
+      const hb = Cartographic.fromCartesian(b).height
+      return ha - hb
+    })
+    const bottom = corners.slice(0, 4)
+    const ground = bottom.map((c) => {
+      const carto = Cartographic.fromCartesian(c)
+      carto.height = 0
+      return Cartesian3.fromRadians(carto.longitude, carto.latitude, 0)
+    })
+    const center = ground.reduce(
+      (sum, p) => Cartesian3.add(sum, p, sum),
+      new Cartesian3(0, 0, 0),
+    )
+    Cartesian3.divideByScalar(center, ground.length, center)
+    const angle = (p: Cartesian3) => Math.atan2(p.y - center.y, p.x - center.x)
+    ground.sort((a, b) => angle(a) - angle(b))
+    return ground
+  }
+
+  const addAreaFromPositions = (positions: Cartesian3[]) => {
+    if (!viewer) return
+    const result = computeAreaAndCentroid(positions)
+    const areaEntity = viewer.entities.add({
+      position: result?.centroid,
+      polygon: {
+        hierarchy: new PolygonHierarchy(positions),
+        material: new ColorMaterialProperty(Color.YELLOW.withAlpha(0.5)),
+        outline: true,
+        outlineColor: Color.YELLOW,
+        heightReference: HeightReference.CLAMP_TO_GROUND,
+      },
+      label: result
+        ? {
+            text: `${Math.round(result.area)} m²`,
+            fillColor: Color.BLACK,
+            style: LabelStyle.FILL,
+            showBackground: true,
+            backgroundColor: Color.WHITE.withAlpha(0.5),
+            verticalOrigin: VerticalOrigin.CENTER,
+            heightReference: HeightReference.CLAMP_TO_GROUND,
+          }
+        : undefined,
+    })
+    ;(areaEntity as Entity & { isArea: boolean; positions: Cartesian3[] }).isArea =
+      true
+    ;(areaEntity as Entity & { positions: Cartesian3[] }).positions = positions
+  }
+
   const removeLine = useCallback(
     (line: Entity) => {
     if (!viewer) {
@@ -612,6 +680,16 @@ const Area = ({ viewer }: AreaProps) => {
       if (ignoreNextClick) {
         ignoreNextClick = false
         return
+      }
+      if (!isDrawing) {
+        const picked = viewer.scene.pick(event.position)
+        if (picked && picked.id instanceof Cesium3DTileFeature) {
+          const footprint = computeFootprint(picked.id)
+          if (footprint && footprint.length >= 3) {
+            addAreaFromPositions(footprint)
+            return
+          }
+        }
       }
       const position = getPosition(event)
       if (!position) {
