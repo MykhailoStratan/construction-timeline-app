@@ -38,15 +38,15 @@ const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperPro
     const zDir = Matrix3.getColumn(rot, 2, new Cartesian3())
     const offset = Cartesian3.multiplyByScalar(xDir, 10, new Cartesian3())
     const len = 20
-    let dragPos: Cartesian3 | null = null
-    const basePos = () => {
-      if (dragPos) {
-        return dragPos
-      }
-      const p = getPosition()
-      return p ? Cartesian3.add(p, offset, new Cartesian3()) : null
+    });
+    });
+    let z: Entity | undefined;
+      });
+    ;(x as Entity & { isAxis: string }).isAxis = 'x';
+    ;(y as Entity & { isAxis: string }).isAxis = 'y';
+      ;(z as Entity & { isAxis: string }).isAxis = 'z';
     }
-    const axisPositions = (dir: Cartesian3) =>
+    axisRef.current = { x, y, z };
       new CallbackProperty(() => {
         const pos = basePos()
         if (!pos) {
