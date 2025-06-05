@@ -11,6 +11,8 @@ import {
   ConstantPositionProperty,
   Cartesian3,
   Cartesian2,
+  Plane,
+  IntersectionTests,
   Entity,
   HeightReference,
   EllipsoidTangentPlane,
@@ -177,6 +179,7 @@ const Area = ({ viewer }: AreaProps) => {
     axisHandlerRef.current = handler
     let dragging: 'x' | 'y' | 'z' | null = null
     let startMouse: Cartesian3 | null = null
+    let startPlane: Plane | null = null
 
     const getPosition = (
       event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
@@ -230,6 +233,10 @@ const Area = ({ viewer }: AreaProps) => {
         if (ent.isAxis) {
           dragging = ent.isAxis as 'x' | 'y' | 'z'
           startMouse = getPosition(e)
+          if (startMouse) {
+            const normal = Cartesian3.normalize(axisDirs[dragging], new Cartesian3())
+            startPlane = Plane.fromPointNormal(startMouse, normal)
+          }
           const controller = viewer.scene.screenSpaceCameraController
           if (!cameraStateRef.current) {
             cameraStateRef.current = {
@@ -252,6 +259,7 @@ const Area = ({ viewer }: AreaProps) => {
     handler.setInputAction(() => {
       dragging = null
       startMouse = null
+      startPlane = null
       restoreCamera()
     }, ScreenSpaceEventType.LEFT_UP)
 
@@ -259,13 +267,16 @@ const Area = ({ viewer }: AreaProps) => {
 
     handler.setInputAction((m: ScreenSpaceEventHandler.MotionEvent) => {
       if (dragging && startMouse) {
-        const pos = getPosition(m)
-        if (!pos) return
-        const diff = Cartesian3.subtract(pos, startMouse, new Cartesian3())
+        const ray = viewer.camera.getPickRay(m.endPosition)
+        if (!ray || !startPlane) return
+        const endPos = IntersectionTests.rayPlane(ray, startPlane, new Cartesian3())
+        if (!endPos) return
+        const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
         const dir = axisDirs[dragging]
         const amount = Cartesian3.dot(diff, dir)
         const translation = Cartesian3.multiplyByScalar(dir, amount, new Cartesian3())
         update(translation)
+        startMouse = endPos
         return
       }
       const picked = viewer.scene.pick(m.endPosition)
