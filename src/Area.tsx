@@ -121,20 +121,25 @@ const Area = ({ viewer }: AreaProps) => {
       axisHelperRef.current = null
     }
     if (axisAreaRef.current && movedPositionsRef.current) {
-      axisAreaRef.current.polygon!.hierarchy = new ConstantProperty(
-        new PolygonHierarchy(movedPositionsRef.current),
+      const area = axisAreaRef.current
+      const positions = movedPositionsRef.current
+      axisAreaRef.current = null
+      movedPositionsRef.current = null
+      hierarchyCallbackRef.current = null
+
+      area.polygon!.hierarchy = new ConstantProperty(
+        new PolygonHierarchy(positions),
       )
-      ;(axisAreaRef.current as Entity & { positions?: Cartesian3[] }).positions =
-        movedPositionsRef.current
-      const result = await computeAreaWithTerrain(movedPositionsRef.current)
+      ;(area as Entity & { positions?: Cartesian3[] }).positions = positions
+      const result = await computeAreaWithTerrain(positions)
       if (result) {
-        axisAreaRef.current.position = new ConstantPositionProperty(result.centroid)
-        if (axisAreaRef.current.label) {
-          axisAreaRef.current.label.text = new ConstantProperty(
+        area.position = new ConstantPositionProperty(result.centroid)
+        if (area.label) {
+          area.label.text = new ConstantProperty(
             `${Math.round(result.area)} m²`,
           )
         } else {
-          axisAreaRef.current.label = new LabelGraphics({
+          area.label = new LabelGraphics({
             text: new ConstantProperty(`${Math.round(result.area)} m²`),
             fillColor: new ConstantProperty(Color.BLACK),
             style: new ConstantProperty(LabelStyle.FILL),
@@ -149,9 +154,6 @@ const Area = ({ viewer }: AreaProps) => {
           })
         }
       }
-      axisAreaRef.current = null
-      movedPositionsRef.current = null
-      hierarchyCallbackRef.current = null
     }
     axisHandlerRef.current?.destroy()
     axisHandlerRef.current = null
