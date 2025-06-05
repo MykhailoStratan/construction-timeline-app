@@ -147,38 +147,39 @@ const Area = ({ viewer }: AreaProps) => {
     const yDir = Matrix3.getColumn(rot, 1, new Cartesian3())
     const zDir = Matrix3.getColumn(rot, 2, new Cartesian3())
     const len = 20
-    const xEnd = Cartesian3.add(
-      center,
-      Cartesian3.multiplyByScalar(xDir, len, new Cartesian3()),
-      new Cartesian3(),
-    )
-    const yEnd = Cartesian3.add(
-      center,
-      Cartesian3.multiplyByScalar(yDir, len, new Cartesian3()),
-      new Cartesian3(),
-    )
-    const zEnd = Cartesian3.add(
-      center,
-      Cartesian3.multiplyByScalar(zDir, len, new Cartesian3()),
-      new Cartesian3(),
-    )
+    const axisPositions = (dir: Cartesian3) =>
+      new CallbackProperty(() => {
+        const pos = axisAreaRef.current?.position?.getValue(
+          viewer.clock.currentTime,
+        )
+        if (!pos) {
+          return []
+        }
+        const end = Cartesian3.add(
+          pos,
+          Cartesian3.multiplyByScalar(dir, len, new Cartesian3()),
+          new Cartesian3(),
+        )
+        return [pos, end]
+      }, false)
+
     const x = viewer.entities.add({
       polyline: {
-        positions: [center, xEnd],
+        positions: axisPositions(xDir),
         material: Color.RED,
         width: 4,
       },
     })
     const y = viewer.entities.add({
       polyline: {
-        positions: [center, yEnd],
+        positions: axisPositions(yDir),
         material: Color.GREEN,
         width: 4,
       },
     })
     const z = viewer.entities.add({
       polyline: {
-        positions: [center, zEnd],
+        positions: axisPositions(zDir),
         material: Color.BLUE,
         width: 4,
       },
@@ -228,19 +229,7 @@ const Area = ({ viewer }: AreaProps) => {
       )
       ;(area as Entity & { positions?: Cartesian3[] }).positions =
         movedPositionsRef.current
-      const ends = {
-        x: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(xDir, len, new Cartesian3()), new Cartesian3()),
-        y: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(yDir, len, new Cartesian3()), new Cartesian3()),
-        z: Cartesian3.add(newPos, Cartesian3.multiplyByScalar(zDir, len, new Cartesian3()), new Cartesian3()),
-      }
-      if (axisHelperRef.current) {
-        axisHelperRef.current.x.polyline!.positions =
-          new ConstantProperty([newPos, ends.x])
-        axisHelperRef.current.y.polyline!.positions =
-          new ConstantProperty([newPos, ends.y])
-        axisHelperRef.current.z.polyline!.positions =
-          new ConstantProperty([newPos, ends.z])
-      }
+      // Axis helper positions update via CallbackProperty
     }
 
     handler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
