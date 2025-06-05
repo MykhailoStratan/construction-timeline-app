@@ -21,8 +21,8 @@ import {
   Cartographic,
   LabelGraphics,
 } from 'cesium'
-import AxisHelper from './AxisHelper'
-import type { AxisHelperProps } from './AxisHelper'
+import AxisHelper from './components/axis-helper'
+import type { AxisHelperProps } from './components/axis-helper'
 
 interface AreaProps {
   viewer: Viewer | null
