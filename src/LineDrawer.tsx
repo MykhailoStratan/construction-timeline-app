@@ -157,6 +157,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     setIsLineMode(true)
 
     let isDrawing = false
+    let longPressTimeout: number | null = null
+    let ignoreNextClick = false
     const getPosition = (
       event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
     ): Cartesian3 | null => {
@@ -179,6 +181,10 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     }
 
     handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
+      if (ignoreNextClick) {
+        ignoreNextClick = false
+        return
+      }
       const position = getPosition(event)
       if (!position) {
         return
@@ -238,6 +244,26 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     }, ScreenSpaceEventType.LEFT_CLICK)
 
     handler.setInputAction(() => {
+      if (!isDrawing) {
+        return
+      }
+      longPressTimeout = window.setTimeout(() => {
+        finishDrawing()
+        ignoreNextClick = true
+      }, ScreenSpaceEventHandler.touchHoldDelayMilliseconds)
+    }, ScreenSpaceEventType.LEFT_DOWN)
+
+    const cancelLongPress = () => {
+      if (longPressTimeout !== null) {
+        clearTimeout(longPressTimeout)
+        longPressTimeout = null
+      }
+    }
+
+    handler.setInputAction(cancelLongPress, ScreenSpaceEventType.LEFT_UP)
+    handler.setInputAction(cancelLongPress, ScreenSpaceEventType.MOUSE_MOVE)
+
+    const finishDrawing = () => {
       if (drawingLineRef.current) {
         viewer.entities.remove(drawingLineRef.current)
         drawingLineRef.current = null
@@ -253,7 +279,10 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       startPositionRef.current = null
       mousePositionRef.current = null
       isDrawing = false
-    }, ScreenSpaceEventType.RIGHT_CLICK)
+    }
+
+    handler.setInputAction(finishDrawing, ScreenSpaceEventType.RIGHT_CLICK)
+    handler.setInputAction(finishDrawing, ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
 
     handler.setInputAction((movement: ScreenSpaceEventHandler.MotionEvent) => {
       if (!drawingLineRef.current) {
