@@ -85,6 +85,11 @@ export async function computeAreaWithTerrain(
     )
     return computeSurfaceAreaAndCentroid(withHeights)
   } catch {
-    return computeSurfaceAreaAndCentroid(positions)
+    // Fall back to clamping the positions to the ellipsoid surface to
+    // avoid huge area values when the polygon isn't close to the ground.
+    const flattened = cartographics.map((c) =>
+      Cartesian3.fromRadians(c.longitude, c.latitude, 0, Ellipsoid.WGS84),
+    )
+    return computeSurfaceAreaAndCentroid(flattened)
   }
 }

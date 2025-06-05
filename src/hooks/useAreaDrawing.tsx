@@ -10,6 +10,7 @@ import {
   ConstantProperty,
   ConstantPositionProperty,
   Cartesian3,
+  Cartographic,
   Plane,
   IntersectionTests,
   Entity,
@@ -248,19 +249,17 @@ export default function useAreaDrawing(viewer: Viewer | null) {
     axisAreaRef.current = area
 
     const update = (translation: Cartesian3) => {
-      const pos = area.position?.getValue(viewer.clock.currentTime)
-      if (!pos || !movedPositionsRef.current) return
-      const newPos = Cartesian3.add(pos, translation, new Cartesian3())
-      area.position = new ConstantPositionProperty(newPos)
-      movedPositionsRef.current = movedPositionsRef.current.map((p) =>
-        Cartesian3.add(p, translation, new Cartesian3()),
-      )
+      const ellipsoid = viewer.scene.globe.ellipsoid
+      if (!movedPositionsRef.current) return
+      movedPositionsRef.current = movedPositionsRef.current.map((p) => {
+        const translated = Cartesian3.add(p, translation, new Cartesian3())
+        const c = ellipsoid.cartesianToCartographic(translated, new Cartographic())
+        c.height = 0
+        return Cartesian3.fromRadians(c.longitude, c.latitude, 0, ellipsoid)
+      })
       ;(area as Entity & { positions?: Cartesian3[] }).positions =
         movedPositionsRef.current
-      const result = computeAreaAndCentroid(
-        movedPositionsRef.current,
-        viewer.scene.globe.ellipsoid,
-      )
+      const result = computeAreaAndCentroid(movedPositionsRef.current, ellipsoid)
       if (result) {
         area.position = new ConstantPositionProperty(result.centroid)
         if (area.label) {
