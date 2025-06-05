@@ -10,10 +10,9 @@ import {
   ConstantProperty,
   ConstantPositionProperty,
   Cartesian3,
-  Cartesian2,
+  Cartographic,
   Entity,
   HeightReference,
-  EllipsoidTangentPlane,
   PolygonHierarchy,
   LabelStyle,
   VerticalOrigin,
@@ -27,37 +26,27 @@ function computeAreaAndCentroid(
   if (!viewer || positions.length < 3) {
     return null
   }
-  const plane = EllipsoidTangentPlane.fromPoints(
-    positions,
-    viewer.scene.globe.ellipsoid,
+  const ellipsoid = viewer.scene.globe.ellipsoid
+  const cartographics = positions.map((p) =>
+    Cartographic.fromCartesian(p, ellipsoid),
   )
-  const projected = plane.projectPointsOntoPlane(positions, [])
-  if (projected.length < 3) {
-    return null
+  let area = 0
+  for (let i = 0, j = cartographics.length - 1; i < cartographics.length; j = i++) {
+    const p0 = cartographics[j]
+    const p1 = cartographics[i]
+    area +=
+      (p1.longitude - p0.longitude) *
+      (Math.sin(p1.latitude) + Math.sin(p0.latitude))
   }
-  let signedArea = 0
-  let cx = 0
-  let cy = 0
-  for (let i = 0, j = projected.length - 1; i < projected.length; j = i++) {
-    const p0 = projected[j]
-    const p1 = projected[i]
-    const f = p0.x * p1.y - p1.x * p0.y
-    signedArea += f
-    cx += (p0.x + p1.x) * f
-    cy += (p0.y + p1.y) * f
-  }
-  signedArea *= 0.5
-  if (signedArea === 0) {
-    return null
-  }
-  const area = Math.abs(signedArea)
-  cx /= 6 * signedArea
-  cy /= 6 * signedArea
-  const centroid2D = new Cartesian2(cx, cy)
-  const centroid = plane.projectPointOntoEllipsoid(
-    centroid2D,
-    new Cartesian3(),
+  area =
+    Math.abs(area * ellipsoid.maximumRadius * ellipsoid.maximumRadius * 0.5)
+
+  const centroid = positions.reduce(
+    (sum, p) => Cartesian3.add(sum, p, sum),
+    new Cartesian3(0, 0, 0),
   )
+  Cartesian3.divideByScalar(centroid, positions.length, centroid)
+
   return { area, centroid }
 }
 
