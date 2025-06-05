@@ -10,21 +10,20 @@ import {
   ConstantProperty,
   ConstantPositionProperty,
   Cartesian3,
-  Cartesian2,
   Plane,
   IntersectionTests,
   Entity,
   HeightReference,
-  EllipsoidTangentPlane,
   PolygonHierarchy,
   Transforms,
   Matrix4,
   Matrix3,
   LabelStyle,
   VerticalOrigin,
-  Cartographic,
   LabelGraphics,
 } from 'cesium'
+import { computeAreaAndCentroid, computeAreaWithTerrain } from './geometry'
+import { useDrawingEntities } from './hooks/useDrawingEntities'
 
 interface AreaProps {
   viewer: Viewer | null
@@ -62,39 +61,20 @@ const Area = ({ viewer }: AreaProps) => {
       }
     | null
   >(null)
-  const anchorsRef = useRef<Entity[]>([])
-  const linesRef = useRef<Entity[]>([])
+  const {
+    anchorsRef,
+    linesRef,
+    highlightLine,
+    unhighlightLine,
+    highlightAnchor,
+    unhighlightAnchor,
+    addAnchor,
+    removeLine,
+    removeAnchor,
+  } = useDrawingEntities(viewer)
   const firstAnchorRef = useRef<Entity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
   const [isAreaMode, setIsAreaMode] = useState(false)
-
-  const highlightLine = (line: Entity) => {
-    if (line.polyline) {
-      line.polyline.material = new ColorMaterialProperty(Color.RED)
-      line.polyline.width = new ConstantProperty(3)
-    }
-  }
-
-  const unhighlightLine = (line: Entity) => {
-    if (line.polyline) {
-      line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
-      line.polyline.width = new ConstantProperty(2)
-    }
-  }
-
-  const highlightAnchor = (anchor: Entity) => {
-    if (anchor.point) {
-      anchor.point.color = new ConstantProperty(Color.RED)
-      anchor.point.pixelSize = new ConstantProperty(10)
-    }
-  }
-
-  const unhighlightAnchor = (anchor: Entity) => {
-    if (anchor.point) {
-      anchor.point.color = new ConstantProperty(Color.ORANGE)
-      anchor.point.pixelSize = new ConstantProperty(8)
-    }
-  }
 
   const restoreCamera = useCallback(() => {
     if (!viewer || !cameraStateRef.current) {
@@ -131,7 +111,7 @@ const Area = ({ viewer }: AreaProps) => {
         new PolygonHierarchy(positions),
       )
       ;(area as Entity & { positions?: Cartesian3[] }).positions = positions
-      const result = await computeAreaWithTerrain(positions)
+      const result = await computeAreaWithTerrain(viewer, positions)
       if (result) {
         area.position = new ConstantPositionProperty(result.centroid)
         if (area.label) {
@@ -257,7 +237,7 @@ const Area = ({ viewer }: AreaProps) => {
       )
       ;(area as Entity & { positions?: Cartesian3[] }).positions =
         movedPositionsRef.current
-      const result = computeAreaAndCentroid(movedPositionsRef.current)
+      const result = computeAreaAndCentroid(viewer, movedPositionsRef.current)
       if (result) {
         area.position = new ConstantPositionProperty(result.centroid)
         if (area.label) {
@@ -378,140 +358,6 @@ const Area = ({ viewer }: AreaProps) => {
     [removeAxisHelper],
   )
 
-  const computeAreaAndCentroid = (
-    positions: Cartesian3[],
-  ): { area: number; centroid: Cartesian3 } | null => {
-    if (!viewer || positions.length < 3) {
-      return null
-    }
-    const plane = EllipsoidTangentPlane.fromPoints(
-      positions,
-      viewer.scene.globe.ellipsoid,
-    )
-    const projected = plane.projectPointsOntoPlane(positions, [])
-    if (projected.length < 3) {
-      return null
-    }
-    let signedArea = 0
-    let cx = 0
-    let cy = 0
-    for (let i = 0, j = projected.length - 1; i < projected.length; j = i++) {
-      const p0 = projected[j]
-      const p1 = projected[i]
-      const f = p0.x * p1.y - p1.x * p0.y
-      signedArea += f
-      cx += (p0.x + p1.x) * f
-      cy += (p0.y + p1.y) * f
-    }
-    signedArea *= 0.5
-    if (signedArea === 0) {
-      return null
-    }
-    const area = Math.abs(signedArea)
-    cx /= 6 * signedArea
-    cy /= 6 * signedArea
-    const centroid2D = new Cartesian2(cx, cy)
-    const centroid = plane.projectPointOntoEllipsoid(
-      centroid2D,
-      new Cartesian3(),
-    )
-    return { area, centroid }
-  }
-
-  const computeSurfaceAreaAndCentroid = (
-    positions: Cartesian3[],
-  ): { area: number; centroid: Cartesian3 } | null => {
-    if (positions.length < 3) {
-      return null
-    }
-    let area = 0
-    const centroid = new Cartesian3(0, 0, 0)
-    const base = positions[0]
-    for (let i = 1; i < positions.length - 1; i++) {
-      const b = positions[i]
-      const c = positions[i + 1]
-      const ab = Cartesian3.subtract(b, base, new Cartesian3())
-      const ac = Cartesian3.subtract(c, base, new Cartesian3())
-      const cross = Cartesian3.cross(ab, ac, new Cartesian3())
-      const triArea = Cartesian3.magnitude(cross) * 0.5
-      area += triArea
-      const triCentroid = Cartesian3.multiplyByScalar(
-        Cartesian3.add(
-          base,
-          Cartesian3.add(b, c, new Cartesian3()),
-          new Cartesian3(),
-        ),
-        1 / 3,
-        new Cartesian3(),
-      )
-      Cartesian3.multiplyByScalar(triCentroid, triArea, triCentroid)
-      Cartesian3.add(centroid, triCentroid, centroid)
-    }
-    Cartesian3.divideByScalar(centroid, area, centroid)
-    return { area, centroid }
-  }
-
-  async function computeAreaWithTerrain(
-    positions: Cartesian3[],
-  ): Promise<{ area: number; centroid: Cartesian3 } | null> {
-    if (!viewer || positions.length < 3) {
-      return null
-    }
-    const cartographics = positions.map((p) =>
-      Cartographic.fromCartesian(p),
-    )
-    try {
-      const sampled = await viewer.scene.sampleHeightMostDetailed(cartographics)
-      const withHeights = sampled.map((c) =>
-        Cartesian3.fromRadians(c.longitude, c.latitude, c.height),
-      )
-      return computeSurfaceAreaAndCentroid(withHeights)
-    } catch {
-      return computeSurfaceAreaAndCentroid(positions)
-    }
-  }
-
-  const removeLine = useCallback(
-    (line: Entity) => {
-    if (!viewer) {
-      return
-    }
-    viewer.entities.remove(line)
-    linesRef.current = linesRef.current.filter((l) => l !== line)
-    const lineWithAnchors = line as Entity & { anchors?: [Entity, Entity] }
-    if (lineWithAnchors.anchors) {
-      for (const anchor of lineWithAnchors.anchors) {
-        const a = anchor as Entity & { connectedLines?: Set<Entity> }
-        a.connectedLines?.delete(line)
-        if (!a.connectedLines || a.connectedLines.size === 0) {
-          viewer.entities.remove(a)
-          anchorsRef.current = anchorsRef.current.filter((e) => e !== a)
-          if (selectedAnchorRef.current === a) {
-            selectedAnchorRef.current = null
-          }
-        }
-      }
-    }
-    },
-    [viewer],
-  )
-
-  const removeAnchor = useCallback(
-    (anchor: Entity) => {
-      if (!viewer) {
-        return
-      }
-      viewer.entities.remove(anchor)
-      anchorsRef.current = anchorsRef.current.filter((e) => e !== anchor)
-      const anchorWithLines = anchor as Entity & { connectedLines?: Set<Entity> }
-      if (anchorWithLines.connectedLines) {
-        for (const line of Array.from(anchorWithLines.connectedLines)) {
-          removeLine(line)
-        }
-      }
-    },
-    [removeLine, viewer],
-  )
 
   const removeArea = useCallback(
     (area: Entity) => {
@@ -526,31 +372,7 @@ const Area = ({ viewer }: AreaProps) => {
     [viewer, removeAxisHelper],
   )
 
-  const addAnchor = (position: Cartesian3) => {
-    if (!viewer) {
-      return null
-    }
-    for (const existing of anchorsRef.current) {
-      const pos = existing.position?.getValue(viewer.clock.currentTime)
-      if (pos && Cartesian3.distance(pos, position) < 1) {
-        return existing
-      }
-    }
-    const anchor: Entity = viewer.entities.add({
-      position,
-      point: {
-        pixelSize: 8,
-        color: Color.ORANGE,
-        outlineColor: Color.WHITE,
-        outlineWidth: 1,
-        heightReference: HeightReference.CLAMP_TO_GROUND,
-      },
-    })
-    ;(anchor as Entity & { isAnchor: boolean; connectedLines: Set<Entity> }).isAnchor = true
-    ;(anchor as Entity & { isAnchor: boolean; connectedLines: Set<Entity> }).connectedLines = new Set()
-    anchorsRef.current.push(anchor)
-    return anchor
-  }
+
 
   const startAreaMode = () => {
     if (!viewer) {
@@ -659,7 +481,7 @@ const Area = ({ viewer }: AreaProps) => {
           polygonPositionsRef.current.length >= 3
         ) {
           const polyPositions = [...polygonPositionsRef.current]
-          const result = computeAreaAndCentroid(polyPositions)
+          const result = computeAreaAndCentroid(viewer, polyPositions)
           const areaEntity = viewer.entities.add({
             position: result?.centroid,
             polygon: {
