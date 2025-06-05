@@ -234,7 +234,20 @@ const Area = ({ viewer }: AreaProps) => {
           dragging = ent.isAxis as 'x' | 'y' | 'z'
           startMouse = getPosition(e)
           if (startMouse) {
-            const normal = Cartesian3.normalize(axisDirs[dragging], new Cartesian3())
+            const cameraDir = viewer.camera.direction
+            let normal = Cartesian3.cross(
+              cameraDir,
+              axisDirs[dragging],
+              new Cartesian3(),
+            )
+            if (Cartesian3.magnitude(normal) === 0) {
+              normal = Cartesian3.cross(
+                viewer.camera.up,
+                axisDirs[dragging],
+                new Cartesian3(),
+              )
+            }
+            Cartesian3.normalize(normal, normal)
             startPlane = Plane.fromPointNormal(startMouse, normal)
           }
           const controller = viewer.scene.screenSpaceCameraController
@@ -273,7 +286,7 @@ const Area = ({ viewer }: AreaProps) => {
         if (!endPos) return
         const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
         const dir = axisDirs[dragging]
-        const amount = Cartesian3.dot(diff, dir) * 0.5
+        const amount = Cartesian3.dot(diff, dir)
         const translation = Cartesian3.multiplyByScalar(dir, amount, new Cartesian3())
         update(translation)
         startMouse = endPos
