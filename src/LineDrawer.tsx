@@ -12,6 +12,7 @@ import {
   Entity,
   HeightReference,
 } from 'cesium'
+import AxisHelper from './AxisHelper'
 
 interface LineDrawerProps {
   viewer: Viewer | null
@@ -26,6 +27,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const mousePositionRef = useRef<Cartesian3 | null>(null)
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
+  const [selectedLine, setSelectedLine] = useState<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
   const [isLineMode, setIsLineMode] = useState(false)
 
@@ -34,6 +36,8 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       line.polyline.material = new ColorMaterialProperty(Color.RED)
       line.polyline.width = new ConstantProperty(3)
     }
+    selectedLineRef.current = line
+    setSelectedLine(line)
   }
 
   const unhighlightLine = (line: Entity) => {
@@ -41,6 +45,10 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
       line.polyline.width = new ConstantProperty(2)
     }
+    if (selectedLineRef.current === line) {
+      selectedLineRef.current = null
+    }
+    setSelectedLine(null)
   }
 
   const highlightAnchor = (anchor: Entity) => {
@@ -57,12 +65,41 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     }
   }
 
+  const moveSelectedLine = useCallback(
+    (translation: Cartesian3) => {
+      if (!viewer || !selectedLine) return
+      const pos = selectedLine.polyline?.positions?.getValue(
+        viewer.clock.currentTime,
+      ) as Cartesian3[] | undefined
+      if (!pos) return
+      const moved = pos.map((p) =>
+        Cartesian3.add(p, translation, new Cartesian3()),
+      )
+      selectedLine.polyline!.positions = new ConstantProperty(moved)
+      ;(selectedLine as Entity & { positions?: Cartesian3[] }).positions = moved
+      const lineWithAnchors = selectedLine as Entity & {
+        anchors?: [Entity, Entity]
+      }
+      if (lineWithAnchors.anchors) {
+        lineWithAnchors.anchors.forEach((a, i) => {
+          const newPos = moved[i]
+          a.position = new ConstantProperty(newPos)
+        })
+      }
+    },
+    [viewer, selectedLine],
+  )
+
   const removeLine = useCallback(
     (line: Entity) => {
     if (!viewer) {
       return
     }
     viewer.entities.remove(line)
+    if (selectedLineRef.current === line) {
+      selectedLineRef.current = null
+      setSelectedLine(null)
+    }
     const lineWithAnchors = line as Entity & { anchors?: [Entity, Entity] }
     if (lineWithAnchors.anchors) {
       for (const anchor of lineWithAnchors.anchors) {
@@ -215,6 +252,10 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
           startPositionRef.current!,
           position,
         ])
+        ;(line as Entity & { positions?: Cartesian3[] }).positions = [
+          startPositionRef.current!,
+          position,
+        ]
         ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).isLine = true
         ;(line as Entity & { isLine: boolean; anchors: [Entity, Entity] }).anchors = [
           startAnchorRef.current!,
@@ -399,12 +440,22 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   }, [isLineMode, removeLine, removeAnchor, viewer])
 
   return (
-    <button
-      onClick={startLineMode}
-      style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
-    >
-      Line
-    </button>
+    <>
+      <button
+        onClick={startLineMode}
+        style={{ border: isLineMode ? '2px solid yellow' : '1px solid gray' }}
+      >
+        Line
+      </button>
+      {viewer && selectedLine && (
+        <AxisHelper
+          viewer={viewer}
+          target={selectedLine}
+          onMove={moveSelectedLine}
+          mode="2d"
+        />
+      )}
+    </>
   )
 }
 

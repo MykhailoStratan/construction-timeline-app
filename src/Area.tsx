@@ -11,20 +11,14 @@ import {
   ConstantPositionProperty,
   Cartesian3,
   Cartesian2,
-  Plane,
-  IntersectionTests,
   Entity,
   HeightReference,
   EllipsoidTangentPlane,
   PolygonHierarchy,
-  Transforms,
-  Matrix4,
-  Matrix3,
   LabelStyle,
   VerticalOrigin,
-  Cartographic,
-  LabelGraphics,
 } from 'cesium'
+import AxisHelper from './AxisHelper'
 
 interface AreaProps {
   viewer: Viewer | null
@@ -40,28 +34,7 @@ const Area = ({ viewer }: AreaProps) => {
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
   const selectedAreaRef = useRef<Entity | null>(null)
-  const axisHelperRef = useRef<
-    | {
-        x: Entity
-        y: Entity
-        z: Entity
-      }
-    | null
-  >(null)
-  const axisAreaRef = useRef<Entity | null>(null)
-  const movedPositionsRef = useRef<Cartesian3[] | null>(null)
-  const hierarchyCallbackRef = useRef<CallbackProperty | null>(null)
-  const axisHandlerRef = useRef<ScreenSpaceEventHandler | null>(null)
-  const cameraStateRef = useRef<
-    | {
-        enableRotate: boolean
-        enableTranslate: boolean
-        enableZoom: boolean
-        enableTilt: boolean
-        enableLook: boolean
-      }
-    | null
-  >(null)
+  const [selectedArea, setSelectedArea] = useState<Entity | null>(null)
   const anchorsRef = useRef<Entity[]>([])
   const linesRef = useRef<Entity[]>([])
   const firstAnchorRef = useRef<Entity | null>(null)
@@ -96,262 +69,6 @@ const Area = ({ viewer }: AreaProps) => {
     }
   }
 
-  const restoreCamera = useCallback(() => {
-    if (!viewer || !cameraStateRef.current) {
-      return
-    }
-    const controller = viewer.scene.screenSpaceCameraController
-    controller.enableRotate = cameraStateRef.current.enableRotate
-    controller.enableTranslate = cameraStateRef.current.enableTranslate
-    controller.enableZoom = cameraStateRef.current.enableZoom
-    controller.enableTilt = cameraStateRef.current.enableTilt
-    controller.enableLook = cameraStateRef.current.enableLook
-    cameraStateRef.current = null
-  }, [viewer])
-
-
-  const removeAxisHelper = useCallback(async () => {
-    if (!viewer) {
-      return
-    }
-    if (axisHelperRef.current) {
-      viewer.entities.remove(axisHelperRef.current.x)
-      viewer.entities.remove(axisHelperRef.current.y)
-      viewer.entities.remove(axisHelperRef.current.z)
-      axisHelperRef.current = null
-    }
-    if (axisAreaRef.current && movedPositionsRef.current) {
-      const area = axisAreaRef.current
-      const positions = movedPositionsRef.current
-      axisAreaRef.current = null
-      movedPositionsRef.current = null
-      hierarchyCallbackRef.current = null
-
-      area.polygon!.hierarchy = new ConstantProperty(
-        new PolygonHierarchy(positions),
-      )
-      ;(area as Entity & { positions?: Cartesian3[] }).positions = positions
-      const result = await computeAreaWithTerrain(positions)
-      if (result) {
-        area.position = new ConstantPositionProperty(result.centroid)
-        if (area.label) {
-          area.label.text = new ConstantProperty(
-            `${Math.round(result.area)} m²`,
-          )
-        } else {
-          area.label = new LabelGraphics({
-            text: new ConstantProperty(`${Math.round(result.area)} m²`),
-            fillColor: new ConstantProperty(Color.BLACK),
-            style: new ConstantProperty(LabelStyle.FILL),
-            showBackground: new ConstantProperty(true),
-            backgroundColor: new ConstantProperty(
-              Color.WHITE.withAlpha(0.5),
-            ),
-            verticalOrigin: new ConstantProperty(VerticalOrigin.CENTER),
-            heightReference: new ConstantProperty(
-              HeightReference.CLAMP_TO_GROUND,
-            ),
-          })
-        }
-      }
-    }
-    axisHandlerRef.current?.destroy()
-    axisHandlerRef.current = null
-    restoreCamera()
-  }, [viewer, restoreCamera, computeAreaWithTerrain])
-
-  const showAxisHelper = useCallback((area: Entity) => {
-    if (!viewer) {
-      return
-    }
-    removeAxisHelper()
-    const center = area.position?.getValue(viewer.clock.currentTime)
-    if (!center) {
-      return
-    }
-    const transform = Transforms.eastNorthUpToFixedFrame(center)
-    const rot = Matrix4.getMatrix3(transform, new Matrix3())
-    const xDir = Matrix3.getColumn(rot, 0, new Cartesian3())
-    const yDir = Matrix3.getColumn(rot, 1, new Cartesian3())
-    const zDir = Matrix3.getColumn(rot, 2, new Cartesian3())
-    const len = 20
-    const axisPositions = (dir: Cartesian3) =>
-      new CallbackProperty(() => {
-        const pos = axisAreaRef.current?.position?.getValue(
-          viewer.clock.currentTime,
-        )
-        if (!pos) {
-          return []
-        }
-        const end = Cartesian3.add(
-          pos,
-          Cartesian3.multiplyByScalar(dir, len, new Cartesian3()),
-          new Cartesian3(),
-        )
-        return [pos, end]
-      }, false)
-
-    const x = viewer.entities.add({
-      polyline: {
-        positions: axisPositions(xDir),
-        material: Color.RED,
-        width: 4,
-      },
-    })
-    const y = viewer.entities.add({
-      polyline: {
-        positions: axisPositions(yDir),
-        material: Color.GREEN,
-        width: 4,
-      },
-    })
-    const z = viewer.entities.add({
-      polyline: {
-        positions: axisPositions(zDir),
-        material: Color.BLUE,
-        width: 4,
-      },
-    })
-    ;(x as Entity & { isAxis: 'x' }).isAxis = 'x'
-    ;(y as Entity & { isAxis: 'y' }).isAxis = 'y'
-    ;(z as Entity & { isAxis: 'z' }).isAxis = 'z'
-    axisHelperRef.current = { x, y, z }
-
-    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
-    axisHandlerRef.current = handler
-    let dragging: 'x' | 'y' | 'z' | null = null
-    let startMouse: Cartesian3 | null = null
-    let startPlane: Plane | null = null
-
-    const getPosition = (
-      event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
-    ): Cartesian3 | null => {
-      const pos = 'position' in event ? event.position : event.endPosition
-      const ray = viewer.camera.getPickRay(pos)
-      if (ray) {
-        const ground = viewer.scene.globe.pick(ray, viewer.scene)
-        if (ground) {
-          return ground
-        }
-      }
-      return viewer.camera.pickEllipsoid(pos) || null
-    }
-
-    const axisDirs = { x: xDir, y: yDir, z: zDir }
-    movedPositionsRef.current = (
-      (area as Entity & { positions?: Cartesian3[] }).positions || []
-    ).map((p) => Cartesian3.clone(p))
-    hierarchyCallbackRef.current = new CallbackProperty(() => {
-      return new PolygonHierarchy(movedPositionsRef.current || [])
-    }, false)
-    area.polygon!.hierarchy = hierarchyCallbackRef.current
-    axisAreaRef.current = area
-
-    const update = (translation: Cartesian3) => {
-      const pos = area.position?.getValue(viewer.clock.currentTime)
-      if (!pos || !movedPositionsRef.current) return
-      const newPos = Cartesian3.add(pos, translation, new Cartesian3())
-      area.position = new ConstantPositionProperty(newPos)
-      movedPositionsRef.current = movedPositionsRef.current.map((p) =>
-        Cartesian3.add(p, translation, new Cartesian3()),
-      )
-      ;(area as Entity & { positions?: Cartesian3[] }).positions =
-        movedPositionsRef.current
-      const result = computeAreaAndCentroid(movedPositionsRef.current)
-      if (result) {
-        area.position = new ConstantPositionProperty(result.centroid)
-        if (area.label) {
-          area.label.text = new ConstantProperty(`${Math.round(result.area)} m²`)
-        }
-      }
-      // Axis helper positions update via CallbackProperty
-    }
-
-    handler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
-      const picked = viewer.scene.pick(e.position)
-      if (picked) {
-        const ent = picked.id as Entity & { isAxis?: string }
-        if (ent.isAxis) {
-          dragging = ent.isAxis as 'x' | 'y' | 'z'
-          startMouse = getPosition(e)
-          if (startMouse) {
-            const cameraDir = viewer.camera.direction
-            let normal = Cartesian3.cross(
-              cameraDir,
-              axisDirs[dragging],
-              new Cartesian3(),
-            )
-            if (Cartesian3.magnitude(normal) === 0) {
-              normal = Cartesian3.cross(
-                viewer.camera.up,
-                axisDirs[dragging],
-                new Cartesian3(),
-              )
-            }
-            Cartesian3.normalize(normal, normal)
-            startPlane = Plane.fromPointNormal(startMouse, normal)
-          }
-          const controller = viewer.scene.screenSpaceCameraController
-          if (!cameraStateRef.current) {
-            cameraStateRef.current = {
-              enableRotate: controller.enableRotate,
-              enableTranslate: controller.enableTranslate,
-              enableZoom: controller.enableZoom,
-              enableTilt: controller.enableTilt,
-              enableLook: controller.enableLook,
-            }
-          }
-          controller.enableRotate = false
-          controller.enableTranslate = false
-          controller.enableZoom = false
-          controller.enableTilt = false
-          controller.enableLook = false
-        }
-      }
-    }, ScreenSpaceEventType.LEFT_DOWN)
-
-    handler.setInputAction(() => {
-      dragging = null
-      startMouse = null
-      startPlane = null
-      restoreCamera()
-    }, ScreenSpaceEventType.LEFT_UP)
-
-    let hovered: Entity | null = null
-
-    handler.setInputAction((m: ScreenSpaceEventHandler.MotionEvent) => {
-      if (dragging && startMouse) {
-        const ray = viewer.camera.getPickRay(m.endPosition)
-        if (!ray || !startPlane) return
-        const endPos = IntersectionTests.rayPlane(ray, startPlane, new Cartesian3())
-        if (!endPos) return
-        const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
-        const dir = axisDirs[dragging]
-        const amount = Cartesian3.dot(diff, dir)
-        const translation = Cartesian3.multiplyByScalar(dir, amount, new Cartesian3())
-        update(translation)
-        startMouse = endPos
-        return
-      }
-      const picked = viewer.scene.pick(m.endPosition)
-      if (picked) {
-        const ent = picked.id as Entity & { isAxis?: string }
-          if (ent.isAxis) {
-            if (hovered && hovered !== ent) {
-              hovered.polyline!.width = new ConstantProperty(4)
-            }
-            hovered = ent
-            hovered.polyline!.width = new ConstantProperty(8)
-            return
-          }
-        }
-        if (hovered) {
-          hovered.polyline!.width = new ConstantProperty(4)
-          hovered = null
-        }
-    }, ScreenSpaceEventType.MOUSE_MOVE)
-  }, [viewer, removeAxisHelper, restoreCamera])
-
   const highlightArea = useCallback(
     (area: Entity) => {
       if (area.polygon) {
@@ -360,9 +77,10 @@ const Area = ({ viewer }: AreaProps) => {
         )
         area.polygon.outlineColor = new ConstantProperty(Color.RED)
       }
-      showAxisHelper(area)
+      selectedAreaRef.current = area
+      setSelectedArea(area)
     },
-    [showAxisHelper],
+    [],
   )
 
   const unhighlightArea = useCallback(
@@ -373,10 +91,49 @@ const Area = ({ viewer }: AreaProps) => {
         )
         area.polygon.outlineColor = new ConstantProperty(Color.YELLOW)
       }
-      removeAxisHelper()
+      if (selectedAreaRef.current === area) {
+        selectedAreaRef.current = null
+      }
+      setSelectedArea(null)
     },
-    [removeAxisHelper],
+    [],
   )
+
+  const moveSelectedArea = useCallback(
+    (translation: Cartesian3) => {
+      if (!viewer || !selectedArea) return
+      const pos = selectedArea.position?.getValue(viewer.clock.currentTime)
+      if (!pos) return
+      const newPos = Cartesian3.add(pos, translation, new Cartesian3())
+      selectedArea.position = new ConstantPositionProperty(newPos)
+      const polyPositions =
+        (selectedArea as Entity & { positions?: Cartesian3[] }).positions || []
+      const moved = polyPositions.map((p) =>
+        Cartesian3.add(p, translation, new Cartesian3()),
+      )
+      if (selectedArea.polygon) {
+        selectedArea.polygon.hierarchy = new ConstantProperty(
+          new PolygonHierarchy(moved),
+        )
+      }
+      ;(selectedArea as Entity & { positions?: Cartesian3[] }).positions = moved
+      const result = computeAreaAndCentroid(moved)
+      if (result) {
+        selectedArea.position = new ConstantPositionProperty(result.centroid)
+        if (selectedArea.label) {
+          selectedArea.label.text = new ConstantProperty(
+            `${Math.round(result.area)} m²`,
+          )
+        }
+      }
+    },
+    [viewer, selectedArea, computeAreaAndCentroid],
+  )
+
+
+
+
+
 
   const computeAreaAndCentroid = (
     positions: Cartesian3[],
@@ -418,58 +175,6 @@ const Area = ({ viewer }: AreaProps) => {
     return { area, centroid }
   }
 
-  const computeSurfaceAreaAndCentroid = (
-    positions: Cartesian3[],
-  ): { area: number; centroid: Cartesian3 } | null => {
-    if (positions.length < 3) {
-      return null
-    }
-    let area = 0
-    const centroid = new Cartesian3(0, 0, 0)
-    const base = positions[0]
-    for (let i = 1; i < positions.length - 1; i++) {
-      const b = positions[i]
-      const c = positions[i + 1]
-      const ab = Cartesian3.subtract(b, base, new Cartesian3())
-      const ac = Cartesian3.subtract(c, base, new Cartesian3())
-      const cross = Cartesian3.cross(ab, ac, new Cartesian3())
-      const triArea = Cartesian3.magnitude(cross) * 0.5
-      area += triArea
-      const triCentroid = Cartesian3.multiplyByScalar(
-        Cartesian3.add(
-          base,
-          Cartesian3.add(b, c, new Cartesian3()),
-          new Cartesian3(),
-        ),
-        1 / 3,
-        new Cartesian3(),
-      )
-      Cartesian3.multiplyByScalar(triCentroid, triArea, triCentroid)
-      Cartesian3.add(centroid, triCentroid, centroid)
-    }
-    Cartesian3.divideByScalar(centroid, area, centroid)
-    return { area, centroid }
-  }
-
-  async function computeAreaWithTerrain(
-    positions: Cartesian3[],
-  ): Promise<{ area: number; centroid: Cartesian3 } | null> {
-    if (!viewer || positions.length < 3) {
-      return null
-    }
-    const cartographics = positions.map((p) =>
-      Cartographic.fromCartesian(p),
-    )
-    try {
-      const sampled = await viewer.scene.sampleHeightMostDetailed(cartographics)
-      const withHeights = sampled.map((c) =>
-        Cartesian3.fromRadians(c.longitude, c.latitude, c.height),
-      )
-      return computeSurfaceAreaAndCentroid(withHeights)
-    } catch {
-      return computeSurfaceAreaAndCentroid(positions)
-    }
-  }
 
   const removeLine = useCallback(
     (line: Entity) => {
@@ -519,11 +224,8 @@ const Area = ({ viewer }: AreaProps) => {
         return
       }
       viewer.entities.remove(area)
-      if (selectedAreaRef.current === area) {
-        removeAxisHelper()
-      }
     },
-    [viewer, removeAxisHelper],
+    [viewer],
   )
 
   const addAnchor = (position: Cartesian3) => {
@@ -914,12 +616,22 @@ const Area = ({ viewer }: AreaProps) => {
   ])
 
   return (
-    <button
-      onClick={startAreaMode}
-      style={{ border: isAreaMode ? '2px solid yellow' : '1px solid gray' }}
-    >
-      Area
-    </button>
+    <>
+      <button
+        onClick={startAreaMode}
+        style={{ border: isAreaMode ? '2px solid yellow' : '1px solid gray' }}
+      >
+        Area
+      </button>
+      {viewer && selectedArea && (
+        <AxisHelper
+          viewer={viewer}
+          target={selectedArea}
+          onMove={moveSelectedArea}
+          mode="2d"
+        />
+      )}
+    </>
   )
 }
 
