@@ -66,22 +66,40 @@ const AxisHelper = ({ viewer, enableZ, getPosition, onTranslate }: AxisHelperPro
     const y = viewer.entities.add({
       polyline: {
         positions: axisPositions(yDir),
-        material: Color.GREEN,
-        width: 4,
-      },
-    })
-    let z: Entity | undefined
-    if (enableZ) {
-      z = viewer.entities.add({
-        polyline: {
-          positions: axisPositions(zDir),
-          material: Color.BLUE,
-          width: 4,
-        },
-      })
+    const groundFromEvent = (
+    const planeIntersection = (
+      event: ScreenSpaceEventHandler.PositionedEvent | ScreenSpaceEventHandler.MotionEvent,
+      plane: Plane,
+    ): Cartesian3 | null => {
+      const pos = 'position' in event ? event.position : event.endPosition
+      const ray = viewer.camera.getPickRay(pos)
+      if (!ray) return null
+      return IntersectionTests.rayPlane(ray, plane, new Cartesian3()) || null
     }
-    ;(x as Entity & { isAxis: string }).isAxis = 'x'
-    ;(y as Entity & { isAxis: string }).isAxis = 'y'
+
+          if (dragging === 'z') {
+            const base = getPosition()
+            if (!base) return
+              viewer.camera.direction,
+              zDir,
+              normal = Cartesian3.cross(viewer.camera.up, zDir, new Cartesian3())
+            startPlane = Plane.fromPointNormal(base, normal)
+            startMouse = planeIntersection(e, startPlane)
+          } else {
+            startMouse = groundFromEvent(e)
+        if (dragging === 'z') {
+          if (!startPlane) return
+          const endPos = planeIntersection(m, startPlane)
+          if (!endPos) return
+          const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
+          const amount = Cartesian3.dot(diff, zDir) * speed
+          const translation = Cartesian3.multiplyByScalar(zDir, amount, new Cartesian3())
+          onTranslate(translation)
+          startMouse = endPos
+          return
+        }
+        const endPos = groundFromEvent(m)
+        const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
     if (z) {
       ;(z as Entity & { isAxis: string }).isAxis = 'z'
     }
