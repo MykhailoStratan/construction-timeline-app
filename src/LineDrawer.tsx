@@ -11,7 +11,7 @@ import {
   Cartesian3,
   Entity,
 } from 'cesium'
-import { useDrawingEntities } from './hooks/useDrawingEntities'
+import { useDrawing } from './hooks/DrawingContext'
 
 interface LineDrawerProps {
   viewer: Viewer | null
@@ -24,8 +24,6 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const startAnchorRef = useRef<Entity | null>(null)
   const drawingLineRef = useRef<Entity | null>(null)
   const mousePositionRef = useRef<Cartesian3 | null>(null)
-  const selectedLineRef = useRef<Entity | null>(null)
-  const selectedAnchorRef = useRef<Entity | null>(null)
   const [isLineMode, setIsLineMode] = useState(false)
 
   const {
@@ -37,9 +35,11 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     addAnchor,
     removeLine,
     removeAnchor,
-  } = useDrawingEntities(viewer)
+    selectedLineRef,
+    selectedAnchorRef,
+  } = useDrawing()
 
-  // removeLine, removeAnchor and addAnchor are provided by useDrawingEntities
+  // removeLine, removeAnchor and addAnchor are provided by DrawingProvider
 
   const startLineMode = () => {
     if (!viewer) {
@@ -274,7 +274,15 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       selectionHandlerRef.current?.destroy()
       selectionHandlerRef.current = null
     }
-  }, [viewer])
+  }, [
+    viewer,
+    highlightLine,
+    unhighlightLine,
+    highlightAnchor,
+    unhighlightAnchor,
+    selectedLineRef,
+    selectedAnchorRef,
+  ])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -313,7 +321,15 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isLineMode, removeLine, removeAnchor, viewer])
+  }, [
+    isLineMode,
+    removeLine,
+    removeAnchor,
+    viewer,
+    anchorsRef,
+    selectedLineRef,
+    selectedAnchorRef,
+  ])
 
   return (
     <button
