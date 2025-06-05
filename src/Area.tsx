@@ -273,7 +273,7 @@ const Area = ({ viewer }: AreaProps) => {
         if (!endPos) return
         const diff = Cartesian3.subtract(endPos, startMouse, new Cartesian3())
         const dir = axisDirs[dragging]
-        const amount = Cartesian3.dot(diff, dir)
+        const amount = Cartesian3.dot(diff, dir) * 0.5
         const translation = Cartesian3.multiplyByScalar(dir, amount, new Cartesian3())
         update(translation)
         startMouse = endPos
