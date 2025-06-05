@@ -8,10 +8,13 @@ import {
   Color,
   ColorMaterialProperty,
   ConstantProperty,
+  Property,
+  ConstantPositionProperty,
   Cartesian3,
   Entity,
   HeightReference,
 } from 'cesium'
+import AxisHelper from './AxisHelper'
 
 interface LineDrawerProps {
   viewer: Viewer | null
@@ -26,14 +29,73 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
   const mousePositionRef = useRef<Cartesian3 | null>(null)
   const selectedLineRef = useRef<Entity | null>(null)
   const selectedAnchorRef = useRef<Entity | null>(null)
+  const axisHelperRef = useRef<AxisHelper | null>(null)
   const anchorsRef = useRef<Entity[]>([])
   const [isLineMode, setIsLineMode] = useState(false)
+
+  useEffect(() => {
+    if (viewer) {
+      axisHelperRef.current = new AxisHelper(viewer)
+    }
+    return () => {
+      axisHelperRef.current?.remove()
+      axisHelperRef.current = null
+    }
+  }, [viewer])
+
+  const showLineAxis = useCallback(
+    (line: Entity) => {
+      if (!viewer || !axisHelperRef.current) {
+        return
+      }
+      axisHelperRef.current.remove()
+      const update = (translation: Cartesian3) => {
+        const time = viewer.clock.currentTime
+        const positions =
+          (line.polyline!.positions as Property).getValue(time) as Cartesian3[]
+        const newPositions = positions.map((p: Cartesian3) =>
+          Cartesian3.add(p, translation, new Cartesian3()),
+        )
+        line.polyline!.positions = new ConstantProperty(newPositions)
+        const anchors = (line as Entity & { anchors?: [Entity, Entity] }).anchors
+        if (anchors) {
+          anchors.forEach((a) => {
+            const pos = a.position?.getValue(time)
+            if (pos) {
+              a.position = new ConstantPositionProperty(
+                Cartesian3.add(pos, translation, new Cartesian3()),
+              )
+            }
+          })
+        }
+      }
+
+      axisHelperRef.current.show({
+        enableZ: false,
+        getPosition: () => {
+          const time = viewer.clock.currentTime
+          const pos =
+            (line.polyline!.positions as Property).getValue(time) as Cartesian3[]
+          if (!pos.length) return null
+          const center = pos.reduce(
+            (sum: Cartesian3, p: Cartesian3) => Cartesian3.add(sum, p, sum),
+            new Cartesian3(0, 0, 0),
+          )
+          Cartesian3.divideByScalar(center, pos.length, center)
+          return center
+        },
+        onTranslate: update,
+      })
+    },
+    [viewer],
+  )
 
   const highlightLine = (line: Entity) => {
     if (line.polyline) {
       line.polyline.material = new ColorMaterialProperty(Color.RED)
       line.polyline.width = new ConstantProperty(3)
     }
+    showLineAxis(line)
   }
 
   const unhighlightLine = (line: Entity) => {
@@ -41,6 +103,7 @@ const LineDrawer = ({ viewer }: LineDrawerProps) => {
       line.polyline.material = new ColorMaterialProperty(Color.YELLOW)
       line.polyline.width = new ConstantProperty(2)
     }
+    axisHelperRef.current?.remove()
   }
 
   const highlightAnchor = (anchor: Entity) => {
