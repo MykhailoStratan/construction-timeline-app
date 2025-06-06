@@ -24,7 +24,7 @@ interface ExtrusionToolProps {
 const arrowLength = 20
 
 const ExtrusionTool = ({ viewer }: ExtrusionToolProps) => {
-  const { selectedAreaRef } = useDrawing()
+  const { selectedAreaRef, removeAxisHelper, showAxisHelper } = useDrawing()
   const [isActive, setIsActive] = useState(false)
   const arrowRef = useRef<Entity | null>(null)
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null)
@@ -41,8 +41,12 @@ const ExtrusionTool = ({ viewer }: ExtrusionToolProps) => {
     handlerRef.current?.destroy()
     handlerRef.current = null
     removeArrow()
+    const area = selectedAreaRef.current
+    if (area) {
+      showAxisHelper(area)
+    }
     setIsActive(false)
-  }, [removeArrow])
+  }, [removeArrow, selectedAreaRef, showAxisHelper])
 
   const showArrow = useCallback(
     (area: AreaEntity) => {
@@ -83,6 +87,7 @@ const ExtrusionTool = ({ viewer }: ExtrusionToolProps) => {
       stop()
       return
     }
+    removeAxisHelper()
     setIsActive(true)
     extrudedRef.current =
       (area.polygon?.extrudedHeight?.getValue(viewer.clock.currentTime) as number) ||
@@ -176,7 +181,7 @@ const ExtrusionTool = ({ viewer }: ExtrusionToolProps) => {
         hovered = false
       }
     }, ScreenSpaceEventType.MOUSE_MOVE)
-  }, [viewer, selectedAreaRef, showArrow, stop])
+  }, [viewer, selectedAreaRef, showArrow, stop, removeAxisHelper])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

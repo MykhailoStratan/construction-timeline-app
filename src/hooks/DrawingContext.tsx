@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useRef,
+  useCallback,
   type ReactNode,
 } from 'react'
 import { Viewer, Cartesian3 } from 'cesium'
@@ -21,6 +22,12 @@ export interface DrawingContextType {
   addAnchor: (position: Cartesian3) => AnchorEntity | null
   removeLine: (line: LineEntity) => void
   removeAnchor: (anchor: AnchorEntity) => void
+  showAxisHelper: (area: AreaEntity) => void
+  removeAxisHelper: () => void
+  setAxisHelperCallbacks: (cbs: {
+    show: (area: AreaEntity) => void
+    remove: () => void
+  }) => void
 }
 
 interface DrawingProviderProps {
@@ -46,6 +53,24 @@ export const DrawingProvider = ({ viewer, children }: DrawingProviderProps) => {
   const selectedLineRef = useRef<LineEntity | null>(null)
   const selectedAnchorRef = useRef<AnchorEntity | null>(null)
   const selectedAreaRef = useRef<AreaEntity | null>(null)
+  const showAxisHelperRef = useRef<(area: AreaEntity) => void>(() => {})
+  const removeAxisHelperRef = useRef<() => void>(() => {})
+
+  const setAxisHelperCallbacks = useCallback(
+    (cbs: { show: (area: AreaEntity) => void; remove: () => void }) => {
+      showAxisHelperRef.current = cbs.show
+      removeAxisHelperRef.current = cbs.remove
+    },
+    [],
+  )
+
+  const showAxisHelper = useCallback((area: AreaEntity) => {
+    showAxisHelperRef.current(area)
+  }, [])
+
+  const removeAxisHelper = useCallback(() => {
+    removeAxisHelperRef.current()
+  }, [])
 
   return (
     <DrawingContext.Provider
@@ -62,6 +87,9 @@ export const DrawingProvider = ({ viewer, children }: DrawingProviderProps) => {
         addAnchor,
         removeLine,
         removeAnchor,
+        showAxisHelper,
+        removeAxisHelper,
+        setAxisHelperCallbacks,
       }}
     >
       {children}

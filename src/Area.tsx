@@ -72,6 +72,7 @@ const Area = ({ viewer }: AreaProps) => {
     selectedLineRef,
     selectedAnchorRef,
     selectedAreaRef,
+    setAxisHelperCallbacks,
   } = useDrawing()
   const firstAnchorRef = useRef<AnchorEntity | null>(null)
   const polygonPositionsRef = useRef<Cartesian3[]>([])
@@ -357,6 +358,16 @@ const Area = ({ viewer }: AreaProps) => {
     },
     [removeAxisHelper],
   )
+
+  useEffect(() => {
+    setAxisHelperCallbacks({ show: showAxisHelper, remove: removeAxisHelper })
+    return () => {
+      setAxisHelperCallbacks({
+        show: () => {},
+        remove: () => {},
+      })
+    }
+  }, [setAxisHelperCallbacks, showAxisHelper, removeAxisHelper])
 
 
   const removeArea = useCallback(
