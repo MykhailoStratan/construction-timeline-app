@@ -2,6 +2,7 @@ import { Viewer } from 'cesium'
 import LineDrawer from './LineDrawer'
 import Area from './Area'
 import ExtrusionTool from './ExtrusionTool'
+import TerrainProjectionTool from './TerrainProjectionTool'
 import { DrawingProvider } from './hooks/DrawingContext'
 import styles from './ToolsPanel.module.css'
 
@@ -16,6 +17,7 @@ const ToolsPanel = ({ viewer }: ToolsPanelProps) => {
         <LineDrawer viewer={viewer} />
         <Area viewer={viewer} />
         <ExtrusionTool viewer={viewer} />
+        <TerrainProjectionTool viewer={viewer} />
       </div>
     </DrawingProvider>
   )
