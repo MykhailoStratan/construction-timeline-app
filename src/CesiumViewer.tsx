@@ -5,9 +5,13 @@ import {
   createWorldTerrainAsync,
   createOsmBuildingsAsync,
   Cartesian3,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  Cesium3DTileFeature,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import ToolsPanel from './ToolsPanel'
+import BuildingContextMenu from './BuildingContextMenu'
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
 if (ionToken) {
@@ -18,6 +22,10 @@ const CesiumViewer = () => {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const [viewer, setViewer] = useState<Viewer | null>(null)
+  const [contextMenu, setContextMenu] = useState<
+    | { x: number; y: number; feature: Cesium3DTileFeature }
+    | null
+  >(null)
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -52,10 +60,51 @@ const CesiumViewer = () => {
     }
   }, [])
 
+  useEffect(() => {
+    if (!viewerRef.current) {
+      return
+    }
+    const handler = new ScreenSpaceEventHandler(
+      viewerRef.current.scene.canvas,
+    )
+    handler.setInputAction((event: ScreenSpaceEventHandler.PositionedEvent) => {
+      const picked = viewerRef.current!.scene.pick(event.position)
+      if (picked instanceof Cesium3DTileFeature) {
+        setContextMenu({
+          x: event.position.x,
+          y: event.position.y,
+          feature: picked,
+        })
+      } else {
+        setContextMenu(null)
+      }
+    }, ScreenSpaceEventType.RIGHT_CLICK)
+    handler.setInputAction(() => {
+      setContextMenu(null)
+    }, ScreenSpaceEventType.LEFT_CLICK)
+    return () => {
+      handler.destroy()
+    }
+  }, [viewer])
+
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
-      <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
+      <div
+        ref={containerRef}
+        style={{ height: '100%', width: '100%' }}
+        onContextMenu={(e) => e.preventDefault()}
+      />
       <ToolsPanel viewer={viewer} />
+      {contextMenu && (
+        <BuildingContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onHide={() => {
+            contextMenu.feature.show = false
+            setContextMenu(null)
+          }}
+        />
+      )}
     </div>
   )
 }
