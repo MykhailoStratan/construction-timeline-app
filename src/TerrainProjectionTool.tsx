@@ -48,7 +48,7 @@ const TerrainProjectionTool = ({ viewer }: TerrainProjectionToolProps) => {
     const maxLon = Math.max(...lons)
     const minLat = Math.min(...lats)
     const maxLat = Math.max(...lats)
-    const steps = 10
+    const steps = 32
     const stepLon = (maxLon - minLon) / steps
     const stepLat = (maxLat - minLat) / steps
 
