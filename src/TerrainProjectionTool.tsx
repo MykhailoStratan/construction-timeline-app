@@ -38,6 +38,7 @@ const TerrainProjectionTool = ({ viewer }: TerrainProjectionToolProps) => {
     viewer.entities.add({
       polygon: {
         hierarchy: new PolygonHierarchy(elevated),
+        perPositionHeight: true,
         material: new ColorMaterialProperty(Color.CYAN.withAlpha(0.6)),
         outline: true,
         outlineColor: new ConstantProperty(Color.CYAN),
@@ -46,7 +47,7 @@ const TerrainProjectionTool = ({ viewer }: TerrainProjectionToolProps) => {
     })
   }, [viewer, selectedAreaRef])
 
-  return <button onClick={project}>Project</button>
+  return <button onClick={project}>Terrain projection</button>
 }
 
 export default TerrainProjectionTool
