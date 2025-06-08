@@ -3,6 +3,7 @@ import LineDrawer from './LineDrawer'
 import Area from './Area'
 import ExtrusionTool from './ExtrusionTool'
 import TerrainProjectionTool from './TerrainProjectionTool'
+import ModelPlacementTool from './ModelPlacementTool'
 import { DrawingProvider } from './hooks/DrawingContext'
 import styles from './ToolsPanel.module.css'
 
@@ -18,6 +19,7 @@ const ToolsPanel = ({ viewer }: ToolsPanelProps) => {
         <Area viewer={viewer} />
         <ExtrusionTool viewer={viewer} />
         <TerrainProjectionTool viewer={viewer} />
+        <ModelPlacementTool viewer={viewer} />
       </div>
     </DrawingProvider>
   )
