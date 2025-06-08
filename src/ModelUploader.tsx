@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Viewer,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
+  Cartesian2,
   Cesium3DTileset,
   Transforms,
 } from 'cesium'
@@ -18,6 +19,24 @@ const ModelUploader = ({ viewer }: ModelUploaderProps) => {
   const [placingId, setPlacingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null)
+
+  const placeTileset = useCallback(
+    async (assetId: number, position: Cartesian2) => {
+      if (!viewer) return
+      try {
+        const pos =
+          viewer.scene.pickPosition(position) ||
+          viewer.camera.pickEllipsoid(position)
+        if (!pos) return
+        const tileset = await Cesium3DTileset.fromIonAssetId(assetId)
+        tileset.modelMatrix = Transforms.eastNorthUpToFixedFrame(pos)
+        viewer.scene.primitives.add(tileset)
+      } catch {
+        setError('Failed to load tileset')
+      }
+    },
+    [viewer],
+  )
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -41,12 +60,7 @@ const ModelUploader = ({ viewer }: ModelUploaderProps) => {
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     handlerRef.current = handler
     handler.setInputAction(async (e: ScreenSpaceEventHandler.PositionedEvent) => {
-      const pos = viewer.scene.pickPosition(e.position) ||
-        viewer.camera.pickEllipsoid(e.position)
-      if (!pos) return
-      const tileset = await Cesium3DTileset.fromIonAssetId(placingId)
-      tileset.modelMatrix = Transforms.eastNorthUpToFixedFrame(pos)
-      viewer.scene.primitives.add(tileset)
+      await placeTileset(placingId, e.position)
       setPlacingId(null)
       handler.destroy()
       handlerRef.current = null
@@ -55,12 +69,12 @@ const ModelUploader = ({ viewer }: ModelUploaderProps) => {
       handler.destroy()
       handlerRef.current = null
     }
-  }, [viewer, placingId])
+  }, [viewer, placingId, placeTileset])
 
   return (
     <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.8)' }}>
       <input type="file" onChange={handleFileChange} accept=".gltf,.glb,.obj,.fbx" />
-      {uploading && <p>Uploading...</p>}
+      {uploading && <p>Uploading and processing...</p>}
       {error && <p style={{ color: 'red' }}>{error}</p>}
       <ul>
         {assets.map((a) => (

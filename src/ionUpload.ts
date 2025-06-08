@@ -6,6 +6,33 @@ export interface CreateAssetResponse {
   }
 }
 
+interface AssetStatusResponse {
+  id: number
+  status: string
+  percentComplete?: number
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForAssetReady(id: number, token: string) {
+  const statusUrl = `https://api.cesium.com/v1/assets/${id}`
+  while (true) {
+    const res = await fetch(statusUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      throw new Error('Failed to check asset status')
+    }
+    const data = (await res.json()) as AssetStatusResponse
+    if (data.status === 'COMPLETE' || data.status === 'READY') {
+      return
+    }
+    await sleep(5000)
+  }
+}
+
 export async function uploadModelToIon(file: File): Promise<number> {
   const token = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
   if (!token) {
@@ -40,5 +67,8 @@ export async function uploadModelToIon(file: File): Promise<number> {
   if (!uploadRes.ok) {
     throw new Error('Upload failed')
   }
+
+  await waitForAssetReady(createData.assetMetadata.id, token)
+
   return createData.assetMetadata.id
 }
