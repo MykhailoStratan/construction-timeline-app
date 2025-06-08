@@ -44,6 +44,7 @@ export async function uploadModelToIon(file: File): Promise<number> {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      Accept: 'application/json',
     },
     body: JSON.stringify({
       name: file.name,
@@ -52,7 +53,16 @@ export async function uploadModelToIon(file: File): Promise<number> {
     }),
   })
   if (!createRes.ok) {
-    throw new Error(`Failed to create asset: ${createRes.statusText}`)
+    let msg = `Failed to create asset: ${createRes.status} ${createRes.statusText}`
+    try {
+      const data = await createRes.json()
+      if (data && data.message) {
+        msg += ` - ${data.message}`
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+    throw new Error(msg)
   }
   const createData = (await createRes.json()) as CreateAssetResponse
   const formData = new FormData()
