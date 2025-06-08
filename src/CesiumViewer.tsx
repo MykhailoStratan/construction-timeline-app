@@ -12,6 +12,7 @@ import {
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import ToolsPanel from './ToolsPanel'
 import BuildingContextMenu from './BuildingContextMenu'
+import ModelUploader from './ModelUploader'
 
 const ionToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN
 if (ionToken) {
@@ -95,6 +96,7 @@ const CesiumViewer = () => {
         onContextMenu={(e) => e.preventDefault()}
       />
       <ToolsPanel viewer={viewer} />
+      <ModelUploader viewer={viewer} />
       {contextMenu && (
         <BuildingContextMenu
           x={contextMenu.x}

@@ -11,7 +11,9 @@ VITE_CESIUM_ION_ACCESS_TOKEN=your_token_here
 ```
 
 Copy `.env.example` to `.env` and replace the placeholder value. The `.env` file
-is gitignored so your token remains private.
+is gitignored so your token remains private. Ensure the token has permission to
+create and upload assets on Cesium ion, otherwise uploads will fail with an
+authorization error.
 
 Currently, two official plugins are available:
 
