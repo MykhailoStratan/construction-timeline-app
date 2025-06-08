@@ -70,7 +70,14 @@ export async function uploadModelToIon(file: File): Promise<number> {
     }
     throw new Error(msg)
   }
-  const createData = (await createRes.json()) as CreateAssetResponse
+  const createData = (await createRes.json()) as Partial<CreateAssetResponse>
+  if (
+    !createData.assetMetadata?.id ||
+    !createData.uploadLocation?.url ||
+    !createData.uploadLocation.fields
+  ) {
+    throw new Error('Invalid response from Cesium ion')
+  }
   const formData = new FormData()
   for (const [key, value] of Object.entries(createData.uploadLocation.fields)) {
     formData.append(key, value)
