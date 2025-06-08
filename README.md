@@ -2,16 +2,12 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Cesium Ion access token
 
-Set your Cesium Ion access token in a `.env` file at the project root:
+## 3D view
 
-```bash
-VITE_CESIUM_ION_ACCESS_TOKEN=your_token_here
-```
-
-Copy `.env.example` to `.env` and replace the placeholder value. The `.env` file
-is gitignored so your token remains private.
+This project uses [Three.js](https://threejs.org/) to render a simple 3D scene.
+The default scene includes a camera, ambient and directional lights, a sky-
+colored background and a flat plane acting as the ground.
 
 Currently, two official plugins are available:
 
