@@ -48,6 +48,7 @@ export async function uploadModelToIon(file: File): Promise<number> {
     },
     body: JSON.stringify({
       name: file.name,
+      description: 'Uploaded via web app',
       type: '3DTILES',
       options: { sourceType: '3D_MODEL' },
     }),
