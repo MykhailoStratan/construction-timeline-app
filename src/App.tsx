@@ -1,7 +1,7 @@
-import CesiumViewer from './CesiumViewer'
+import ThreeViewer from './ThreeViewer'
 
 function App() {
-  return <CesiumViewer />
+  return <ThreeViewer />
 }
 
 export default App
