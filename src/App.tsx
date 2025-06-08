@@ -1,13 +1,7 @@
 import CesiumViewer from './CesiumViewer'
-import ModelUploader from './ModelUploader'
 
 function App() {
-  return (
-    <>
-      <CesiumViewer />
-      <ModelUploader />
-    </>
-  )
+  return <CesiumViewer />
 }
 
 export default App

@@ -1,10 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  Viewer,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  Cesium3DTileset,
+  Transforms,
+} from 'cesium'
 import { uploadModelToIon } from './ionUpload'
 
-const ModelUploader = () => {
+interface ModelUploaderProps {
+  viewer: Viewer | null
+}
+
+const ModelUploader = ({ viewer }: ModelUploaderProps) => {
   const [uploading, setUploading] = useState(false)
-  const [assetId, setAssetId] = useState<number | null>(null)
+  const [assets, setAssets] = useState<{ id: number; name: string }[]>([])
+  const [placingId, setPlacingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const handlerRef = useRef<ScreenSpaceEventHandler | null>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -13,7 +26,7 @@ const ModelUploader = () => {
     setUploading(true)
     try {
       const id = await uploadModelToIon(file)
-      setAssetId(id)
+      setAssets((a) => [...a, { id, name: file.name }])
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -21,12 +34,42 @@ const ModelUploader = () => {
     }
   }
 
+  useEffect(() => {
+    if (!viewer || placingId === null) {
+      return
+    }
+    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+    handlerRef.current = handler
+    handler.setInputAction(async (e: ScreenSpaceEventHandler.PositionedEvent) => {
+      const pos = viewer.scene.pickPosition(e.position) ||
+        viewer.camera.pickEllipsoid(e.position)
+      if (!pos) return
+      const tileset = await Cesium3DTileset.fromIonAssetId(placingId)
+      tileset.modelMatrix = Transforms.eastNorthUpToFixedFrame(pos)
+      viewer.scene.primitives.add(tileset)
+      setPlacingId(null)
+      handler.destroy()
+      handlerRef.current = null
+    }, ScreenSpaceEventType.LEFT_CLICK)
+    return () => {
+      handler.destroy()
+      handlerRef.current = null
+    }
+  }, [viewer, placingId])
+
   return (
-    <div style={{ padding: '1rem' }}>
+    <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.8)' }}>
       <input type="file" onChange={handleFileChange} accept=".gltf,.glb,.obj,.fbx" />
       {uploading && <p>Uploading...</p>}
-      {assetId && <p>Uploaded asset ID: {assetId}</p>}
       {error && <p style={{ color: 'red' }}>{error}</p>}
+      <ul>
+        {assets.map((a) => (
+          <li key={a.id}>
+            <button onClick={() => setPlacingId(a.id)}>Place {a.name}</button>
+          </li>
+        ))}
+      </ul>
+      {placingId && <p>Click on the terrain to place the model...</p>}
     </div>
   )
 }
