@@ -21,11 +21,8 @@ const ModelPlacementTool = ({ viewer }: ModelPlacementToolProps) => {
     handlerRef.current?.destroy()
     handlerRef.current = null
     setIsActive(false)
-    if (modelUrl) {
-      URL.revokeObjectURL(modelUrl)
-    }
     setModelUrl(null)
-  }, [modelUrl])
+  }, [])
 
   const startPlacement = useCallback(() => {
     if (!viewer || !modelUrl) {
@@ -48,6 +45,9 @@ const ModelPlacementTool = ({ viewer }: ModelPlacementToolProps) => {
           position: cartesian,
           model: { uri: modelUrl, heightReference: HeightReference.CLAMP_TO_GROUND },
         })
+        if (modelUrl) {
+          setTimeout(() => URL.revokeObjectURL(modelUrl), 10000)
+        }
         stop()
       }
     }, ScreenSpaceEventType.LEFT_CLICK)
@@ -69,11 +69,15 @@ const ModelPlacementTool = ({ viewer }: ModelPlacementToolProps) => {
       if (!viewer || !file) {
         return
       }
+      if (modelUrl) {
+        URL.revokeObjectURL(modelUrl)
+      }
       const url = URL.createObjectURL(file)
       setModelUrl(url)
       setIsActive(true)
+      e.target.value = ''
     },
-    [viewer],
+    [viewer, modelUrl],
   )
 
   return (
