@@ -5,7 +5,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import { Viewer, Cartesian3 } from 'cesium'
+import { Viewer, Cartesian3, HeightReference } from 'cesium'
 import type { AnchorEntity, LineEntity, AreaEntity } from '../entityTypes'
 import { useDrawingEntities } from './useDrawingEntities'
 
@@ -19,7 +19,10 @@ export interface DrawingContextType {
   unhighlightLine: (line: LineEntity) => void
   highlightAnchor: (anchor: AnchorEntity) => void
   unhighlightAnchor: (anchor: AnchorEntity) => void
-  addAnchor: (position: Cartesian3) => AnchorEntity | null
+  addAnchor: (
+    position: Cartesian3,
+    heightReference?: HeightReference,
+  ) => AnchorEntity | null
   removeLine: (line: LineEntity) => void
   removeAnchor: (anchor: AnchorEntity) => void
   showAxisHelper: (area: AreaEntity) => void

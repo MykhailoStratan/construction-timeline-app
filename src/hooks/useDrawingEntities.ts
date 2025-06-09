@@ -42,7 +42,10 @@ export function useDrawingEntities(viewer: Viewer | null) {
   }, [])
 
   const addAnchor = useCallback(
-    (position: Cartesian3): AnchorEntity | null => {
+    (
+      position: Cartesian3,
+      heightReference: HeightReference = HeightReference.CLAMP_TO_GROUND,
+    ): AnchorEntity | null => {
       if (!viewer) {
         return null
       }
@@ -59,7 +62,7 @@ export function useDrawingEntities(viewer: Viewer | null) {
           color: Color.ORANGE,
           outlineColor: Color.WHITE,
           outlineWidth: 1,
-          heightReference: HeightReference.CLAMP_TO_GROUND,
+          heightReference,
         },
       }) as AnchorEntity
       anchor.isAnchor = true
